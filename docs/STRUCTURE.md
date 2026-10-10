@@ -1,6 +1,6 @@
 # 架构索引（本文件的目录清单由 scripts/selftest.py 校验）
 
-> 权威接口契约在指南包的 [repo-structure.md](../local-agent-learning-path/repo-structure.md)。
+> 权威接口契约在指南包的 [repo-structure.md](../../local-agent-learning-path/repo-structure.md)。
 > 本文件只说明"哪个目录归哪个里程碑"，不重新定义接口。
 
 ## 分层与依赖方向

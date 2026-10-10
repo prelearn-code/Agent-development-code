@@ -1,6 +1,6 @@
 # 环境实测记录
 
-> 依据：指南 [01-ENVIRONMENT.md](../local-agent-learning-path/01-ENVIRONMENT.md) §8。
+> 依据：指南 [01-ENVIRONMENT.md](../../local-agent-learning-path/01-ENVIRONMENT.md) §8。
 > **环境改变必须建新实验，不修改旧结果。**
 
 ## 主机（2026-10-10 实测）
