@@ -278,13 +278,31 @@ def check_pyproject() -> None:
     ok("pyproject", "name/version/requires-python(>=3.12) 齐备")
 
 
-def check_env_placeholder_anthropic() -> None:
-    """Ollama 地址不应写成 localhost —— WSL 默认 NAT 下不可达。"""
+def check_ollama_endpoint() -> None:
+    """Ollama 与本应用同机，地址必须是回环。
+
+    这个检查的**方向被反转过一次**：旧方案把 Ollama 留在 Windows 宿主，
+    Ubuntu 侧必须用宿主 IP，所以当时检查的是"不得写 localhost"。
+    现在 Ollama 是 Ubuntu 内的 systemd 服务，跨网络访问的前提已不存在，
+    写宿主 IP 或 0.0.0.0 才是错的（见指南 01-ENVIRONMENT.md §0、§5）。
+    """
     env = REPO / ".env.example"
-    if env.is_file() and "OLLAMA_BASE_URL=http://localhost" in env.read_text(encoding="utf-8"):
-        warn("Ollama 地址", "OLLAMA_BASE_URL 指向 localhost；WSL NAT 模式下不可达，应使用宿主 IP")
+    if not env.is_file():
+        fail("Ollama 地址", ".env.example 不存在")
+        return
+    match = re.search(r"^OLLAMA_BASE_URL=(\S+)\s*$", env.read_text(encoding="utf-8"), re.M)
+    if not match:
+        fail("Ollama 地址", ".env.example 缺少 OLLAMA_BASE_URL")
+        return
+    host = re.sub(r"^[a-z][a-z0-9+.-]*://", "", match.group(1))
+    host = host.split("/")[0].rsplit(":", 1)[0].strip("[]")
+    if host in ("127.0.0.1", "localhost", "::1"):
+        ok("Ollama 地址", f"回环地址 {host}，与同机 systemd 服务一致")
     else:
-        ok("Ollama 地址", "未误用 localhost")
+        fail(
+            "Ollama 地址",
+            f"OLLAMA_BASE_URL 指向 {host}；Ollama 与本应用同机，应改为 127.0.0.1",
+        )
 
 
 def main() -> int:
@@ -299,7 +317,7 @@ def main() -> int:
     check_gitignore()
     check_layering()
     check_tool_spec_guard()
-    check_env_placeholder_anthropic()
+    check_ollama_endpoint()
 
     for level, check, detail in results:
         line = f"[{level}] {check}"

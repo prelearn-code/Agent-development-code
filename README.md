@@ -4,31 +4,36 @@
 >
 > 学习指南（16 个目标、验收标准、评测数据集）在 `../Agent-development-doc/`。
 > 本项目是**指南的产物**，不是指南的一部分。两者独立管理、独立提交。
+>
+> **实现与交付**：全部代码与依赖运行在 **Ubuntu** 内；**最终交付物是 `web/` 前端页面**，
+> Windows 用浏览器从网络访问它即完成验收，Windows 侧不安装任何东西。
 
 ---
 
-## 快速开始（WSL Ubuntu-22.04）
+## 快速开始（Ubuntu）
+
+全部命令在 **Ubuntu 内**执行（本机为 WSL2 里的 Ubuntu-22.04）；Windows 不需要装任何东西。
 
 ```bash
+cd /home/zsw/work/agent_development/Agent-development-code
+
 # 0. 先验证骨架自洽（纯标准库，不需要装任何依赖）
 python3 scripts/selftest.py
 
-# 1. 建虚拟环境。WSL 自带 3.10，项目要 3.12 —— 用 uv 拉，不要 apt 装
+# 1. 建虚拟环境。Ubuntu 自带 3.10，项目要 3.12 —— 用 uv 拉，不要 apt 装
 uv venv --python 3.12 .venv
 source .venv/bin/activate
 
 # 2. 装 M1 依赖（不要一次装全；ml 组含 torch 约 2.5GB，留到 M3 后段）
 uv sync --extra m1 --extra dev
 
-# 3. 配置（.env 不进 git）
+# 3. 配置（.env 不进 git）。Ollama 就在本机，默认值无需修改
 cp .env.example .env
-#    改 OLLAMA_BASE_URL 为 Windows 宿主 IP：
-#    ip route show default | awk '{print $3}'
 
-# 4. 验证 Ollama 连通
+# 4. 验证 Ollama 连通（本机回环，不需要宿主 IP）
 uv run python -c "
 import httpx, os
-base = os.environ.get('OLLAMA_BASE_URL', 'http://172.26.0.1:11434')
+base = os.environ.get('OLLAMA_BASE_URL', 'http://127.0.0.1:11434')
 print(httpx.get(f'{base}/api/version', timeout=5).json())
 "
 
@@ -43,25 +48,32 @@ Phase 0 完成判据见指南 `00-ROADMAP.md` §2：**从新终端进入虚拟�
 
 ## 环境拓扑
 
+**全部实现都在 Ubuntu 内；Windows 只作浏览器客户端。**
+
 ```
-┌─ Windows ─────────────────────────────┐
-│ Ollama (GPU) 监听 0.0.0.0:11434        │  ← 保留在宿主：GPU 已生效，模型已下载
-└───────────────────────────────────────┘
-              ▲ 宿主 IP:11434（NAT 模式下不能用 localhost）
-┌─ WSL Ubuntu-22.04 ────────────────────┐
-│ ~/projects/Agent-development-code   │  ← 本仓库，放在 ext4，不要放 /mnt/d
-│ 原生 Docker 29.1.3 (cgroup v2)         │  ← M1 sandbox、M2 基础设施
-│ uv + Python 3.12                       │
-└───────────────────────────────────────┘
+┌─ Ubuntu 22.04（本机 WSL2）──────────────────────────────┐
+│ /home/zsw/work/agent_development/Agent-development-code │  ← 本仓库（ext4）
+│ Ollama 0.32.15  systemd 服务, 127.0.0.1:11434           │  ← GPU 直通已生效
+│ 原生 Docker 29.1.3 (cgroup v2)                          │  ← M1 sandbox / M2 基础设施
+│ uv + Python 3.12，Node 22 + pnpm                        │  ← M6 前端
+│ API / 前端                                             │  ← 监听 0.0.0.0，供外部访问
+└────────────────────────────────────────────────────────┘
+              ▲ 仅这一条跨系统链路
+┌─ Windows ──────────────────────────────────────────────┐
+│ 浏览器  http://172.26.9.67:<port>                       │  ← 零安装、零配置
+└────────────────────────────────────────────────────────┘
 ```
 
-**为什么仓库必须在 WSL 的 ext4 上**：`/mnt/d` 走 9P 协议，
+**为什么 Ollama 也在 Ubuntu 内**：它已经是 Ubuntu 的 systemd 服务，应用与模型之间是回环通信。
+旧方案（Ollama 留在 Windows、Ubuntu 走宿主 IP）需要对外监听端口、维护防火墙规则，
+还要处理宿主 IP 随 WSL 重建漂移 —— 既然最终交付物只是前端页面，这些代价没有必要。
+
+**为什么仓库必须在 Ubuntu 的 ext4 上**：`/mnt/c`、`/mnt/d` 走 9P 协议，
 venv / node_modules 这类大量小文件操作会慢数倍。
 
-**为什么 Ollama 留在 Windows**：GPU 直通已生效、三个模型已下载，
-迁移需要重拉（其中一个 16.5GB）。WSL 内通过宿主 IP 访问即可。
+**唯一对外的端口是前端/API**：Ollama、数据库、向量库一律绑 `127.0.0.1`。
 
-详见指南 [01-ENVIRONMENT.md](../Agent-development-doc/01-ENVIRONMENT.md)。
+详见指南 [01-ENVIRONMENT.md](../Agent-development-doc/01-ENVIRONMENT.md) §0 与 §5。
 
 ---
 
@@ -113,7 +125,7 @@ python3 ../Agent-development-doc/scripts/check_docs.py   # 指南文档检查
 | `m3-done` | 入库 + 引用 + 检索消融报告 |
 | `m4-done` | 统一执行器 + 审批 + MCP 动态发现 + 恢复 |
 | `m5-done` | Memory + 小模型对比 + Verifier + 场景评测 + 安全回归 |
-| `m6-done` | Web UI + 干净环境 compose up |
+| `m6-done` | Web UI + 干净环境 compose up；**Windows 浏览器从网络访问该页面即完成验收** |
 
 ---
 

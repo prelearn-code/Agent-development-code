@@ -31,9 +31,10 @@ class Settings(BaseSettings):
     API_KEY_HEADER: str = "X-API-Key"
 
     # ---- LLM / Ollama ----
-    # 默认值是 WSL 访问 Windows 宿主的形态；宿主 IP 随 WSL 重建会变，
-    # 用 `ip route show default | awk '{print $3}'` 重新确认。
-    OLLAMA_BASE_URL: str = "http://172.26.0.1:11434"
+    # Ollama 是 Ubuntu 内的 systemd 服务（与本应用同机），走回环即可。
+    # 不要改成 0.0.0.0 或宿主 IP：容器需要访问时用 network_mode: host，
+    # 见指南 01-ENVIRONMENT.md §5.1。
+    OLLAMA_BASE_URL: str = "http://127.0.0.1:11434"
     CONTROLLER_MODEL: str = "qwen3:4b"
     CONTROLLER_MODEL_SMALL: str = "qwen3:4b"
     CONTROLLER_MODEL_LARGE: str = ""  # M5 才需要

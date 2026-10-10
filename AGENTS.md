@@ -27,7 +27,7 @@
 - `infra/`（compose、Dockerfile）、CI 配置、`.gitignore`
 - 样板代码：Pydantic 模型、router 拆分、middleware、CRUD、日志封装
 - SQL DDL 的可执行版本、Alembic 配置
-- `web/`（前端不是本项目的能力目标）
+- `web/`（前端不是学习能力目标，但**是最终交付界面**；AI 写 + 人 review）
 - 文档格式整理、索引生成
 
 ### 协商（人定接口与验收，AI 填实现）
@@ -130,9 +130,11 @@ services/      ← 依赖以上全部
 - MCP server 的**日志必须走 stderr**，stdout 是 JSON-RPC 协议通道
 
 ### 环境
-- 仓库在 WSL ext4 上；**不要**把它移到 `/mnt/d`
-- Ollama 在 Windows 宿主，WSL 内用宿主 IP 而非 `localhost`
-- Docker 是 WSL 内原生 29.1.3，**没有** Docker Desktop
+- **全部实现在 Ubuntu 内完成**，Windows 不承担实现角色（只作浏览器客户端）
+- 仓库在 Ubuntu 的 ext4 上；**不要**把它移到 `/mnt/c`、`/mnt/d`
+- Ollama 是 Ubuntu 内的 systemd 服务，监听 `127.0.0.1:11434`；应用用**回环地址**访问，不再使用宿主 IP
+- Docker 是 Ubuntu 内原生 29.1.3，**没有也不需要** Docker Desktop
+- 前端/API 监听 `0.0.0.0` 供 Windows 浏览器访问；**Ollama/数据库/向量库一律绑回环**，不对外
 
 ---
 

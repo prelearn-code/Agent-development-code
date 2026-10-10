@@ -44,15 +44,19 @@ packages/core/       无 IO；不 import 任何上层
 | `docs/decisions/` | 每阶段 | 决策记录 | **禁止 AI 代写** |
 | `infra/` | M2 | compose、Dockerfile、init SQL | 开发端口绑 127.0.0.1 |
 
-## 环境拓扑（决策：见指南 01-ENVIRONMENT.md §2）
+## 环境拓扑（决策：见指南 01-ENVIRONMENT.md §0）
+
+**全部实现都在 Ubuntu 内；Windows 只作浏览器客户端。**
 
 ```
-Windows  ─ Ollama (GPU, 0.0.0.0:11434)  ← 保留在宿主
-   ▲ 宿主机 IP:11434
-WSL Ubuntu-22.04
-   ├─ ~/projects/Agent-development-code   ← 本仓库（ext4）
-   ├─ 原生 Docker 29.1.3                    ← M1 sandbox / M2 基础设施
-   └─ uv + Python 3.12
+Ubuntu 22.04（本机 WSL2）—— 全部实现都在这里
+   ├─ /home/zsw/work/agent_development/Agent-development-code  ← 本仓库（ext4）
+   ├─ Ollama 0.32.15 (GPU, 127.0.0.1:11434)   ← systemd 服务，不对外
+   ├─ 原生 Docker 29.1.3                       ← M1 sandbox / M2 基础设施
+   ├─ uv + Python 3.12 / Node 22 + pnpm         ← 含 M6 前端
+   └─ API / 前端监听 0.0.0.0                    ← 唯一对外端口
+
+Windows ─ 浏览器 ──► http://<Ubuntu 地址>:<port>   ← 零安装、零配置
 ```
 
 ## 验证入口
