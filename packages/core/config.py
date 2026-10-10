@@ -35,8 +35,10 @@ class Settings(BaseSettings):
     # 不要改成 0.0.0.0 或宿主 IP：容器需要访问时用 network_mode: host，
     # 见指南 01-ENVIRONMENT.md §5.1。
     OLLAMA_BASE_URL: str = "http://127.0.0.1:11434"
-    CONTROLLER_MODEL: str = "qwen3:4b"
-    CONTROLLER_MODEL_SMALL: str = "qwen3:4b"
+    # Controller 计划模型：qwen3.5:4b（qwen35 家族，Q4_K_M，256K ctx，原生 tools/thinking）。
+    # 要求 Ollama >= 0.30.0；出厂采样参数与实验配置分开记录。
+    CONTROLLER_MODEL: str = "qwen3.5:4b"
+    CONTROLLER_MODEL_SMALL: str = "qwen3.5:4b"
     CONTROLLER_MODEL_LARGE: str = ""  # M5 才需要
     JUDGE_MODEL: str = ""  # M5 才需要，必须与生成模型不同
     LLM_TIMEOUT_S: int = 120

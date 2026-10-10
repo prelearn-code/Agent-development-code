@@ -38,20 +38,28 @@
 
 | 模型 | family | 参数 | 量化 | 体积 | 计划关系 |
 |---|---|---|---|---|---|
-| `qwen3.8:27b-q4_K_M` | qwen35 | 27.3B | Q4_K_M | 16.52 GB | 与计划模型**不同代** |
+| **`qwen3.5:4b`** | qwen35 | 4.2B | Q4_K_M | 3.31 GB | **计划 Controller**，**Phase 0 待拉取** |
+| `qwen3.5:9b` | qwen35 | 9.0B | Q4_K_M | 6.55 GB | 目标十一对照（同族同量化），M5 待拉取 |
+| `qwen3.5:27b` | qwen35 | 26.9B | Q4_K_M | 17.48 GB | 可选配置 C；超出可用显存，必然 offload |
+| `qwen3.8:27b-q4_K_M` | qwen35 | 27.3B | Q4_K_M | 16.52 GB | 与计划模型**不同版本**（3.8 ≠ 3.5） |
 | `qwen3.8-agent-32k` | qwen35 | 27.3B | Q4_K_M | 16.52 GB | 自定义微调，非对照基线 |
-| `qwen3-vl:4b` | qwen3vl | 4.4B | Q4_K_M | 3.07 GB | 视觉模型，不能当 Controller |
-| **`qwen3:4b`** | — | — | — | — | **Phase 0 待拉取** |
+| `qwen3-vl:4b` | qwen3vl | 4.4B | Q4_K_M | 3.07 GB | 旧独立视觉模型；`qwen3.5:4b` 已原生多模态，可淘汰 |
 | `bge-m3` | — | — | — | — | M3 待拉取 |
 
-**警告**：现有 27B 模型体积 16.52 GB > 可用显存 13.4 GB，必然 CPU offload；
-且与 `qwen3:4b/8b` 不同代，**不能用于 §13 的 4B vs 8B 对比结论**。
+`qwen3.5:4b` 要求 Ollama ≥ 0.30.0（本机 0.32.15 满足），256K 上下文，原生 tools/thinking/多模态。
+出厂采样参数 `temperature=1 / top_p=0.95 / top_k=20 / presence_penalty=1.5`，与实验配置分开记录。
+
+**警告**：已装的 `qwen3.8` 系（16.52 GB）与计划的 `qwen3.5` 系**不同版本**，
+**不能用于目标十一的 4B vs 9B 对比结论**；此外 `qwen3.5:27b`（17.48 GB）> 可用显存 13.4 GB，
+作可选配置 C 时必然 offload，延迟不可与 4B/9B 组并列。
 
 ## 关键决策
 
 | 决策 | 选择 | 理由 | 何时重新考虑 |
 |---|---|---|---|
 | 实现边界 | **全部在 Ubuntu 内** | sandbox 需要 Linux namespace/cgroup；Windows 侧无对等替代 | 不需要重考虑 |
+| Controller 模型 | **`qwen3.5:4b`**（qwen35 / Q4_K_M） | 原生 tools+thinking+多模态，256K 上下文；同族 9B 可做同量化对照 | 若 4B 在工具选择上不达标，升 9B 而非换族 |
+| 对照模型 | `qwen3.5:9b`（不是 8B） | Qwen3.5 尺寸序列为 0.8/2/4/9/27/35/122b，无 8B，最近的是 9B | 若需严格 4B/8B，改用 qwen3 族另跑一组 |
 | 仓库位置 | Ubuntu ext4 `/home/zsw/work/agent_development/Agent-development-code` | `/mnt/c`、`/mnt/d` 走 9P，venv 大量小文件慢数倍 | 不需要重考虑 |
 | Ollama 位置 | **Ubuntu 内 systemd 服务** | 应用与模型回环通信；宿主 IP 漂移与跨系统网络故障点消失 | 不需要重考虑 |
 | Ollama 监听 | `127.0.0.1:11434`（不对内网开放） | 没有跨系统调用需求；容器需要时用 `network_mode: host` | 若容器必须独立网络，改为监听 docker0 地址 |
@@ -62,7 +70,7 @@
 
 ## 尚未完成（Phase 0 缺口）
 
-- [ ] `qwen3:4b` 拉取
+- [ ] `qwen3.5:4b` 拉取
 - [ ] Ubuntu 侧 `docker-compose-plugin`
 - [ ] `uv venv --python 3.12` + `uv sync --extra m1 --extra dev`
 - [ ] 一个通过的最小请求测试

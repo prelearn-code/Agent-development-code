@@ -101,7 +101,7 @@ cp .env.example .env          # Ollama 在本机回环，默认值即可用
 # 4. 确认 Ollama 服务（应已在 Ubuntu 内运行）
 systemctl status ollama --no-pager
 curl -s http://127.0.0.1:11434/api/version
-ollama pull qwen3:4b          # Phase 0 唯一必需模型
+ollama pull qwen3.5:4b        # Phase 0 唯一必需模型
 
 # 5. 验证
 python3 scripts/selftest.py
