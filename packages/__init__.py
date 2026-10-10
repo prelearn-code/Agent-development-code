@@ -1,4 +1,4 @@
-"""local-professional-agent —— 顶层包。
+"""Agent-development-code —— 顶层包。
 
 分层规则（见 docs/STRUCTURE.md）：
     packages.core   -> 无 IO，纯逻辑

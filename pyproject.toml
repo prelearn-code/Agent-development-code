@@ -1,5 +1,5 @@
 [project]
-name = "local-professional-agent"
+name = "Agent-development-code"
 version = "0.0.1"
 description = "Local Professional Agent Platform - 学习项目（Phase 0 骨架）"
 requires-python = ">=3.12"

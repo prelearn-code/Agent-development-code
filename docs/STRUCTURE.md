@@ -1,6 +1,6 @@
 # 架构索引（本文件的目录清单由 scripts/selftest.py 校验）
 
-> 权威接口契约在指南包的 [repo-structure.md](../../local-agent-learning-path/repo-structure.md)。
+> 权威接口契约在指南包的 [repo-structure.md](../../Agent-development-doc/repo-structure.md)。
 > 本文件只说明"哪个目录归哪个里程碑"，不重新定义接口。
 
 ## 分层与依赖方向
@@ -50,7 +50,7 @@ packages/core/       无 IO；不 import 任何上层
 Windows  ─ Ollama (GPU, 0.0.0.0:11434)  ← 保留在宿主
    ▲ 宿主机 IP:11434
 WSL Ubuntu-22.04
-   ├─ ~/projects/local-professional-agent   ← 本仓库（ext4）
+   ├─ ~/projects/Agent-development-code   ← 本仓库（ext4）
    ├─ 原生 Docker 29.1.3                    ← M1 sandbox / M2 基础设施
    └─ uv + Python 3.12
 ```

@@ -1,6 +1,6 @@
 # 环境实测记录
 
-> 依据：指南 [01-ENVIRONMENT.md](../../local-agent-learning-path/01-ENVIRONMENT.md) §8。
+> 依据：指南 [01-ENVIRONMENT.md](../../Agent-development-doc/01-ENVIRONMENT.md) §8。
 > **环境改变必须建新实验，不修改旧结果。**
 
 ## 主机（2026-10-10 实测）
@@ -49,7 +49,7 @@
 
 | 决策 | 选择 | 理由 | 何时重新考虑 |
 |---|---|---|---|
-| 仓库位置 | WSL ext4 `~/projects/local-professional-agent` | `/mnt/d` 走 9P，venv 大量小文件慢数倍 | 不需要重考虑 |
+| 仓库位置 | WSL ext4 `~/projects/Agent-development-code` | `/mnt/d` 走 9P，venv 大量小文件慢数倍 | 不需要重考虑 |
 | Ollama 位置 | 保留 Windows 原生 | GPU 已生效、模型已下载；迁移需重拉 16.5GB | 若 WSL→Windows 网络持续不稳，则移入 WSL（GPU 直通已验证可用） |
 | Docker 形态 | WSL 内**原生**，不装 Desktop | 少一层转发，compose 行为与 Linux 服务器一致；M6 部署验收更真实 | 若需与 Windows 文件系统深度集成 |
 | Ollama 监听 | `0.0.0.0:11434` + 防火墙限源 | NAT 模式下 WSL 必须走宿主 IP | 若改用 mirrored 网络可回到 127.0.0.1 |

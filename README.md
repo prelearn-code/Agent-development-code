@@ -1,8 +1,8 @@
-# Local Professional Agent Platform
+# Agent Development Code
 
 > 学习项目实施仓库。目标：**独立实现、解释并验证**一个有证据、可恢复、受权限约束的本地专业领域 Agent 系统。
 >
-> 学习指南（16 个目标、验收标准、评测数据集）在 `../local-agent-learning-path/`。
+> 学习指南（16 个目标、验收标准、评测数据集）在 `../Agent-development-doc/`。
 > 本项目是**指南的产物**，不是指南的一部分。两者独立管理、独立提交。
 
 ---
@@ -49,7 +49,7 @@ Phase 0 完成判据见指南 `00-ROADMAP.md` §2：**从新终端进入虚拟�
 └───────────────────────────────────────┘
               ▲ 宿主 IP:11434（NAT 模式下不能用 localhost）
 ┌─ WSL Ubuntu-22.04 ────────────────────┐
-│ ~/projects/local-professional-agent   │  ← 本仓库，放在 ext4，不要放 /mnt/d
+│ ~/projects/Agent-development-code   │  ← 本仓库，放在 ext4，不要放 /mnt/d
 │ 原生 Docker 29.1.3 (cgroup v2)         │  ← M1 sandbox、M2 基础设施
 │ uv + Python 3.12                       │
 └───────────────────────────────────────┘
@@ -61,7 +61,7 @@ venv / node_modules 这类大量小文件操作会慢数倍。
 **为什么 Ollama 留在 Windows**：GPU 直通已生效、三个模型已下载，
 迁移需要重拉（其中一个 16.5GB）。WSL 内通过宿主 IP 访问即可。
 
-详见指南 [01-ENVIRONMENT.md](../local-agent-learning-path/01-ENVIRONMENT.md)。
+详见指南 [01-ENVIRONMENT.md](../Agent-development-doc/01-ENVIRONMENT.md)。
 
 ---
 
@@ -93,7 +93,7 @@ venv / node_modules 这类大量小文件操作会慢数倍。
 python3 scripts/selftest.py                    # 骨架自检：布局/配置对齐/密钥/分层
 uv run pytest -q                               # 单元与集成测试
 uv run ruff check .                            # 静态检查
-python3 ../local-agent-learning-path/scripts/check_docs.py   # 指南文档检查
+python3 ../Agent-development-doc/scripts/check_docs.py   # 指南文档检查
 ```
 
 `scripts/selftest.py` 是**可执行契约**：它检查 `.env.example` 与
@@ -121,7 +121,7 @@ python3 ../local-agent-learning-path/scripts/check_docs.py   # 指南文档检�
 
 1. **没有运行证据不勾选完成**。测试通过、Trace 保存、报告有数据。
 2. **`minimal_agent/` 和 `verifier/tests/` 必须手写**，AI 只能审查不能代写。
-   见指南 [04-AI-ASSISTED-DEV.md](../local-agent-learning-path/04-AI-ASSISTED-DEV.md)。
+   见指南 [04-AI-ASSISTED-DEV.md](../Agent-development-doc/04-AI-ASSISTED-DEV.md)。
 3. **决策记录写进 `docs/decisions/`**，且必须是自己的判断。
 4. **不理解就记账**：`docs/to-digest.md` 记录接受但未吃透的代码，每阶段末清空。
 5. **draft 与 frozen 分离**：占位符数据不得当作 baseline。
@@ -132,11 +132,11 @@ python3 ../local-agent-learning-path/scripts/check_docs.py   # 指南文档检�
 
 | 文档 | 位置 |
 |---|---|
-| 主学习路径（16 目标） | `../local-agent-learning-path/00-ROADMAP.md` |
-| 环境搭建 | `../local-agent-learning-path/01-ENVIRONMENT.md` |
-| 接口/DDL/SSE/证据契约 | `../local-agent-learning-path/repo-structure.md` |
-| 模型矩阵与指标口径 | `../local-agent-learning-path/02-MODEL-AND-EVAL.md` |
-| 学习顺序与节奏 | `../local-agent-learning-path/03-LEARNING-ORDER.md` |
-| AI 辅助原则 | `../local-agent-learning-path/04-AI-ASSISTED-DEV.md` |
-| 进度清单 | `../local-agent-learning-path/checklist.md` |
+| 主学习路径（16 目标） | `../Agent-development-doc/00-ROADMAP.md` |
+| 环境搭建 | `../Agent-development-doc/01-ENVIRONMENT.md` |
+| 接口/DDL/SSE/证据契约 | `../Agent-development-doc/repo-structure.md` |
+| 模型矩阵与指标口径 | `../Agent-development-doc/02-MODEL-AND-EVAL.md` |
+| 学习顺序与节奏 | `../Agent-development-doc/03-LEARNING-ORDER.md` |
+| AI 辅助原则 | `../Agent-development-doc/04-AI-ASSISTED-DEV.md` |
+| 进度清单 | `../Agent-development-doc/checklist.md` |
 | git 同步方式 | [docs/GIT-SYNC.md](docs/GIT-SYNC.md) |

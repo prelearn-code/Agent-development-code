@@ -8,15 +8,15 @@
 
 ```
 D:\work\
-├── local-agent-learning-path\      仓库 A —— 指南（教材）
+├── Agent-development-doc\      仓库 A —— 指南（教材）
 │   └── 相对稳定，改动少，主要在修订时提交
-└── local-professional-agent\       仓库 B —— 实现（作业）
+└── Agent-development-code\       仓库 B —— 实现（作业）
     └── 高频提交，按里程碑打 tag
 ```
 
 **为什么分开**：
 
-1. 指南里有指向 `../local-agent-learning-path/` 的相对链接，同目录结构下才能点开
+1. 指南里有指向 `../Agent-development-doc/` 的相对链接，同目录结构下才能点开
 2. 指南是别人（或你自己）写的规范，实现是你写的代码 —— 版本演进节奏完全不同
 3. 如果合并成一个仓库，M1 的一个小改动会污染指南的提交历史
 
@@ -29,8 +29,8 @@ D:\work\
 
 ```bash
 cd ~/projects
-git clone <指南远端> local-agent-learning-path
-cd local-agent-learning-path
+git clone <指南远端> Agent-development-doc
+cd Agent-development-doc
 
 # 提交前跑指南自带的三个检查
 python3 eval/validate_dataset.py --all --mode draft
@@ -51,7 +51,7 @@ python3 scripts/check_docs.py
 ## 3. 仓库 B：实现
 
 ```bash
-cd ~/projects/local-professional-agent
+cd ~/projects/Agent-development-code
 
 # 提交前必须全绿
 python3 scripts/selftest.py
@@ -89,12 +89,12 @@ docs: 记录为什么 Ollama 留在 Windows 宿主
 mkdir -p ~/projects && cd ~/projects
 
 # 2. 两个都 clone
-git clone <指南远端>  local-agent-learning-path
-git clone <实现远端>  local-professional-agent
+git clone <指南远端>  Agent-development-doc
+git clone <实现远端>  Agent-development-code
 
 # 3. 环境（详见 01-ENVIRONMENT.md）
 sudo apt update && sudo apt install -y docker-compose-plugin
-cd ~/projects/local-professional-agent
+cd ~/projects/Agent-development-code
 uv venv --python 3.12 .venv && source .venv/bin/activate
 uv sync --extra m1 --extra dev
 cp .env.example .env      # 改 OLLAMA_BASE_URL 为宿主 IP
@@ -138,7 +138,7 @@ git diff --cached | grep -inE '(password|secret|token|api[_-]?key)\s*[=:]' | gre
 
 ## 6. 常见问题
 
-**Q: 相对链接 `../local-agent-learning-path/` 点不开？**
+**Q: 相对链接 `../Agent-development-doc/` 点不开？**
 两个仓库不在同级目录。按 §4 的目录结构摆放。
 
 **Q: `selftest.py` 报"配置对齐"失败？**

@@ -1,7 +1,7 @@
 # AGENTS.md —— 本仓库的 AI 智能体协作规则
 
 > 适用于任何 AI 编码助手（含本 DSH 会话）。
-> 完整依据见 `../local-agent-learning-path/04-AI-ASSISTED-DEV.md`。
+> 完整依据见 `../Agent-development-doc/04-AI-ASSISTED-DEV.md`。
 > **这是学习项目，验收标准是"人的能力"，不只是"可运行的产物"。**
 
 ---
