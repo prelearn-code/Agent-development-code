@@ -1,0 +1,18 @@
+# 统一行尾为 LF。
+# 本仓库在 WSL/Linux 运行，CRLF 会导致 shell 脚本
+# "bad interpreter"、Dockerfile 构建失败与 Python 断言差异。
+* text=auto eol=lf
+
+# 二进制文件不做行尾转换
+*.png binary
+*.jpg binary
+*.jpeg binary
+*.gif binary
+*.pdf binary
+*.zip binary
+*.gz binary
+*.gguf binary
+*.safetensors binary
+*.bin binary
+*.sqlite binary
+*.whl binary

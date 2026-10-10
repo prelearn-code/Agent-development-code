@@ -1,0 +1,57 @@
+# ---- 环境与密钥 ----
+.env
+.env.*
+!.env.example
+*.pem
+*.key
+
+# ---- Python ----
+__pycache__/
+*.py[cod]
+*$py.class
+.venv/
+venv/
+.Python
+build/
+dist/
+*.egg-info/
+.eggs/
+.pytest_cache/
+.mypy_cache/
+.ruff_cache/
+.coverage
+htmlcov/
+coverage.xml
+.tox/
+
+# ---- 数据与产物（体积大或含隐私，不进 git）----
+data/
+eval/results/
+reports/*.png
+reports/*.pdf
+*.sqlite
+*.sqlite3
+
+# ---- 模型与缓存 ----
+models/
+*.gguf
+*.safetensors
+.cache/
+huggingface/
+
+# ---- 日志 ----
+*.log
+logs/
+
+# ---- 编辑器与系统 ----
+.vscode/
+.idea/
+*.swp
+.DS_Store
+Thumbs.db
+desktop.ini
+
+# ---- 临时 ----
+tmp/
+*.tmp
+*.bak
