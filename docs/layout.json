@@ -1,0 +1,175 @@
+{
+  "schema_version": 1,
+  "default_stage": "V1",
+  "stages": [
+    "V0",
+    "V1",
+    "V2",
+    "V3",
+    "V4",
+    "V5",
+    "V6"
+  ],
+  "directories": [
+    {
+      "path": "packages/app",
+      "stage": "V0",
+      "purpose": "薄CLI入口，仅调用学习者入口一次"
+    },
+    {
+      "path": "packages/core",
+      "stage": "V0",
+      "purpose": "现有类型、配置、异常、日志"
+    },
+    {
+      "path": "scripts",
+      "stage": "V0",
+      "purpose": "骨架、分层、配置自检"
+    },
+    {
+      "path": "tests",
+      "stage": "V0",
+      "purpose": "入口与合同测试"
+    },
+    {
+      "path": "docs/decisions",
+      "stage": "V0",
+      "purpose": "本人决策记录"
+    },
+    {
+      "path": "packages/llm",
+      "stage": "V1",
+      "purpose": "Ollama原生客户端与NDJSON，待实现"
+    },
+    {
+      "path": "packages/security",
+      "stage": "V1",
+      "purpose": "本人定义授权边界，待实现"
+    },
+    {
+      "path": "packages/crypto/providers",
+      "stage": "V1",
+      "purpose": "固定OpenSSL/GmSSL适配，待实现"
+    },
+    {
+      "path": "tools/builtin",
+      "stage": "V1",
+      "purpose": "先inspect_certificate和digest_file，待实现"
+    },
+    {
+      "path": "tools/tests",
+      "stage": "V1",
+      "purpose": "工具正常/失败/边界验证，待实现"
+    },
+    {
+      "path": "minimal_agent",
+      "stage": "V1",
+      "purpose": "本人手写runner.py与Loop，待实现"
+    },
+    {
+      "path": "minimal_agent/traces",
+      "stage": "V1",
+      "purpose": "脱敏原始消息与调用证据"
+    },
+    {
+      "path": "packages/db",
+      "stage": "V2",
+      "purpose": "持久任务/资源/审计，待实现"
+    },
+    {
+      "path": "packages/db/repository",
+      "stage": "V2",
+      "purpose": "短事务与资源查询，待实现"
+    },
+    {
+      "path": "packages/db/queries",
+      "stage": "V2",
+      "purpose": "基础查询，V6补六查询"
+    },
+    {
+      "path": "services/agent_api/routers",
+      "stage": "V2",
+      "purpose": "合法Python包名，JSON API先行"
+    },
+    {
+      "path": "web/src",
+      "stage": "V2",
+      "purpose": "基础React网页，V6补专项"
+    },
+    {
+      "path": "infra",
+      "stage": "V2",
+      "purpose": "按需Compose/迁移/网络"
+    },
+    {
+      "path": "mcp_integration/client",
+      "stage": "V3",
+      "purpose": "MCP桥接，待实现"
+    },
+    {
+      "path": "mcp_integration/common",
+      "stage": "V3",
+      "purpose": "MCP协议适配与来源记录"
+    },
+    {
+      "path": "mcp_integration/server_crypto",
+      "stage": "V3",
+      "purpose": "先一个Crypto Server复用业务服务"
+    },
+    {
+      "path": "graph/nodes",
+      "stage": "V4",
+      "purpose": "本人State设计，审批与恢复，待实现"
+    },
+    {
+      "path": "verifier/checks",
+      "stage": "V4",
+      "purpose": "本人写状态检查，V5完整事实/引用"
+    },
+    {
+      "path": "verifier/tests",
+      "stage": "V4",
+      "purpose": "本人Verifier反例，待实现"
+    },
+    {
+      "path": "pipelines/ingest",
+      "stage": "V5",
+      "purpose": "Parse/Chunk/索引发布，待实现"
+    },
+    {
+      "path": "pipelines/retrieval",
+      "stage": "V5",
+      "purpose": "授权检索与消融，待实现"
+    },
+    {
+      "path": "pipelines/citation",
+      "stage": "V5",
+      "purpose": "版本化定位/引用，待实现"
+    },
+    {
+      "path": "memory",
+      "stage": "V5",
+      "purpose": "来源/纠正/删除/隔离，待实现"
+    },
+    {
+      "path": "eval/datasets",
+      "stage": "V6",
+      "purpose": "小case持续积累，正式规模/冻结V6"
+    },
+    {
+      "path": "mcp_integration/server_fs",
+      "stage": "V6",
+      "purpose": "受控文件职责，待实现"
+    },
+    {
+      "path": "mcp_integration/server_db",
+      "stage": "V6",
+      "purpose": "固定元数据查询职责，待实现"
+    },
+    {
+      "path": "services/agent_worker",
+      "stage": "V6",
+      "purpose": "需要独立worker时实现，否则注明不适用"
+    }
+  ]
+}

@@ -1,68 +1,88 @@
-# 架构索引（本文件的目录清单由 scripts/selftest.py 校验）
+# 代码布局与逐步扩展
 
-> 权威接口契约在指南包的 [repo-structure.md](../../Agent-development-doc/repo-structure.md)。
-> 本文件只说明"哪个目录归哪个里程碑"，不重新定义接口。
+V0–V6是交付顺序，16目标与M任务前缀用于验收索引。当前布局数据在[layout.json](layout.json)，`scripts/selftest.py --stage V1`检查当前目录和本文覆盖；未来模块仍保留位置，不要求第一天实现。工程字段以同级指南[repo-structure](../../Agent-development-doc/repo-structure.md)为准。
 
-## 分层与依赖方向
+## 1. 先关注核心文件
 
-```
-services/            services/agent-api, services/agent-worker
-    |                依赖全部下层
-graph/               依赖下面全部
-    |
-pipelines/  tools/  mcp/  memory/  verifier/
-    |                依赖 core + db
-packages/db/         只依赖 core
-packages/llm/        只依赖 core
-    |
-packages/core/       无 IO；不 import 任何上层
-```
-
-**硬约束**：`packages/core`、`packages/llm`、`packages/db` 不得 import
-`services` / `graph` / `pipelines` / `tools` / `mcp` / `memory` / `verifier`。
-由 `scripts/selftest.py` 的"分层护栏"检查与 CI 拦截。
-
-## 目录归属
-
-| 目录 | 里程碑 | 内容 | 红线 |
-|---|---|---|---|
-| `packages/core/` | Phase0–M1 | `ToolResult`/`ToolSpec`/`RiskLevel`/`Policy`、配置、异常、日志 | 无 IO |
-| `packages/llm/` | M1 | Ollama 原生 `/api/chat` 客户端、NDJSON 解析、结构化输出、模型路由 | 与前端 SSE 分开适配 |
-| `packages/db/` | M2 | async engine、ORM、`repository/`、`queries/q1~q6.sql` | 路由里不写 SQL |
-| `packages/security/` | **M1 起** | 策略表、RBAC、sandbox、入参白名单、注入缓解、审计 | 唯一执行入口 |
-| `tools/builtin/` | M1 | calculator、read_file、query_database(fixture)、run_python、run_experiment | 走 `execute_tool` |
-| `tools/tests/` | M1 | 参数错误/未知工具/越界/空结果/超时清理/输出超限 | 空结果 `success=True` |
-| `minimal_agent/` | M1 | **手写** Agent Loop、`traces/` 存原始 NDJSON | **禁止 AI 代写** |
-| `pipelines/` | M3 | ingest / retrieval / citation | 每 chunk 存定位元数据 |
-| `mcp/` | M4 | 三个 server + client 动态发现 | 日志走 stderr |
-| `graph/` | M4 | State、节点、条件边、checkpoint、interrupt | State 不塞大对象 |
-| `memory/` | M5 | Extractor、Importance Filter、去重、检索 | 不是每条消息都进 memory |
-| `verifier/` | M4 最小 / M5 完整 | 检查项与对抗性测试 | **对抗测试禁止 AI 代写** |
-| `eval/` | M3 起 | 数据集、runner、metrics、compare | draft/frozen 分离 |
-| `services/` | M2 | FastAPI 路由、middleware、SSE | `run_id` 在生成器前生成 |
-| `tests/` | 全程 | 端到端：恢复、持久化、注入 | 需要真实运行证据 |
-| `docs/decisions/` | 每阶段 | 决策记录 | **禁止 AI 代写** |
-| `infra/` | M2 | compose、Dockerfile、init SQL | 开发端口绑 127.0.0.1 |
-
-## 环境拓扑（决策：见指南 01-ENVIRONMENT.md §0）
-
-**全部实现都在 Ubuntu 内；Windows 只作浏览器客户端。**
-
-```
-Ubuntu 22.04（本机 WSL2）—— 全部实现都在这里
-   ├─ /home/zsw/work/agent_development/Agent-development-code  ← 本仓库（ext4）
-   ├─ Ollama 0.32.15 (GPU, 127.0.0.1:11434)   ← systemd 服务，不对外
-   ├─ 原生 Docker 29.1.3                       ← M1 sandbox / M2 基础设施
-   ├─ uv + Python 3.12 / Node 22 + pnpm         ← 含 M6 前端
-   └─ API / 前端监听 0.0.0.0                    ← 唯一对外端口
-
-Windows ─ 浏览器 ──► http://<Ubuntu 地址>:<port>   ← 零安装、零配置
+```text
+packages/
+  app/cli.py                  已实现薄入口，调用本人runner一次
+  core/                       现有模型/配置/异常/日志
+  crypto/providers/           待实现固定OpenSSL/GmSSL适配
+  security/                   待实现本人定义的授权边界
+  llm/                        待实现Ollama/NDJSON客户端
+tools/
+  builtin/                    待实现证书/摘要handler
+  registry.py                 后续本人确定工具注册
+  executor.py                 后续本人确定唯一授权执行入口
+minimal_agent/
+  runner.py                   后续本人手写，当前不存在
+  traces/                     脱敏原始调用证据
+tests/                        已有入口测试，后续增加合同/集成
 ```
 
-## 验证入口
+第一条业务：直接证书/摘要→registry/execute_tool→单tool反馈→有限手写Loop。没有业务代码时`run`报未实现；不返回伪造证书、摘要或成功。实际实施清单见[CORE-FIRST](CORE-FIRST.md)。
 
-```bash
-python scripts/selftest.py            # 纯标准库，uv sync 之前即可运行
-uv sync --extra m1 --extra dev        # M1 依赖
-uv run pytest -q
+## 2. 保留的目录与引入时机
+
+| 目录 | 首次阶段 | 职责 |
+|---|---|---|
+| `packages/app/` | V0 | 薄CLI入口，仅调用学习者入口一次 |
+| `packages/core/` | V0 | 现有类型、配置、异常、日志 |
+| `scripts/` | V0 | 骨架、分层、配置自检 |
+| `tests/` | V0 | 入口与合同测试 |
+| `docs/decisions/` | V0 | 本人决策记录 |
+| `packages/llm/` | V1 | Ollama原生客户端与NDJSON，待实现 |
+| `packages/security/` | V1 | 本人定义授权边界，待实现 |
+| `packages/crypto/providers/` | V1 | 固定OpenSSL/GmSSL适配，待实现 |
+| `tools/builtin/` | V1 | 先inspect_certificate和digest_file，待实现 |
+| `tools/tests/` | V1 | 工具正常/失败/边界验证，待实现 |
+| `minimal_agent/` | V1 | 本人手写runner.py与Loop，待实现 |
+| `minimal_agent/traces/` | V1 | 脱敏原始消息与调用证据 |
+| `packages/db/` | V2 | 持久任务/资源/审计，待实现 |
+| `packages/db/repository/` | V2 | 短事务与资源查询，待实现 |
+| `packages/db/queries/` | V2 | 基础查询，V6补六查询 |
+| `services/agent_api/routers/` | V2 | 合法Python包名，JSON API先行 |
+| `web/src/` | V2 | 基础React网页，V6补专项 |
+| `infra/` | V2 | 按需Compose/迁移/网络 |
+| `mcp_integration/client/` | V3 | MCP桥接，待实现 |
+| `mcp_integration/common/` | V3 | MCP协议适配与来源记录 |
+| `mcp_integration/server_crypto/` | V3 | 先一个Crypto Server复用业务服务 |
+| `graph/nodes/` | V4 | 本人State设计，审批与恢复，待实现 |
+| `verifier/checks/` | V4 | 本人写状态检查，V5完整事实/引用 |
+| `verifier/tests/` | V4 | 本人Verifier反例，待实现 |
+| `pipelines/ingest/` | V5 | Parse/Chunk/索引发布，待实现 |
+| `pipelines/retrieval/` | V5 | 授权检索与消融，待实现 |
+| `pipelines/citation/` | V5 | 版本化定位/引用，待实现 |
+| `memory/` | V5 | 来源/纠正/删除/隔离，待实现 |
+| `eval/datasets/` | V6 | 小case持续积累，正式规模/冻结V6 |
+| `mcp_integration/server_fs/` | V6 | 受控文件职责，待实现 |
+| `mcp_integration/server_db/` | V6 | 固定元数据查询职责，待实现 |
+| `services/agent_worker/` | V6 | 需要独立worker时实现，否则注明不适用 |
+
+
+MCP项目包名为`mcp_integration`，SDK仍用`import mcp`；无需根目录自建`mcp`包。服务包采用`agent_api/agent_worker`合法名称，未来补__init__与实现时同步打包入口。当前`packages/app`不导入未来API/Graph/MCP，早期启动不依赖全套服务。
+
+## 3. 依赖方向
+
+```text
+packages/app（入口适配） / services（API、可选worker）
+                     ↓
+          minimal_agent / graph（本人控制流）
+                     ↓
+       tools / mcp_integration / pipelines / memory / verifier
+                     ↓
+       packages/crypto / packages/security / packages/db / packages/llm
+                     ↓
+                   packages/core
 ```
+
+core不导入app、业务、服务或存储；llm不依赖工具/图/DB；db不依赖控制流；crypto不依赖模型/Loop/UI。Provider操作由固定适配器完成，模型只提交授权ID；模型提出调用必须通过唯一execute_tool。MCP Server复用同业务服务并复查服务端权限/审批。
+
+AST护栏检查普通绝对/相对import，动态加载需人工审查。`packages/app`唯一固定动态加载是学习者`minimal_agent.runner`，不接受模型或CLI传入任意模块路径。此薄适配器只调用一次，控制Loop由本人负责。
+
+## 4. 命名、安装与完成状态
+
+当前保留`packages/core`与现有类型/配置，不为了统一目录先搬到src/lpa。未来成熟后迁移须同步导入/打包/测试/指南，并保留运行证据。当前wheel包含核心及入口、tools、minimal_agent；扩展模块真正实现时再检查安装后的包与服务命令，不把占位目录当已打包功能。
+
+clone后.gitkeep保证空位置存在；V6仍可不引入独立worker，但必须注明并发/队列不适用，不豁免单进程审批/恢复。布局自检绿不等于技术表通过。源码四仓库同级，Ubuntu运行、Windows访问页面，D盘本次修改与业务运行位置区分。

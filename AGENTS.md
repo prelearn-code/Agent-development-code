@@ -1,170 +1,59 @@
-# AGENTS.md —— 本仓库的 AI 智能体协作规则
+# AI协作与阶段要求
 
-> 适用于任何 AI 编码助手（含本 DSH 会话）。
-> 完整依据见 `../Agent-development-doc/04-AI-ASSISTED-DEV.md`。
-> **这是学习项目，验收标准是"人的能力"，不只是"可运行的产物"。**
+以同级[04协作原则](../Agent-development-doc/04-AI-ASSISTED-DEV.md)、[00主路径](../Agent-development-doc/00-ROADMAP.md)和[05步骤](../Agent-development-doc/05-UBUNTU-STEP-BY-STEP.md)为依据，验收包含人的解释、独立修改、排错与真实证据。
 
----
+## 0. 当前授权与执行位置
 
-## 0. 最高优先级：三条红线
+本次只修改`D:\work\Agent-development-code`并更新远端；**不得直接读写、拉取、安装或运行用户的WSL仓库**，WSL由用户自行同步。未来仅按人明确指定的仓库操作。学习项目的模型/密码业务、依赖构建与服务运行仍安排在Ubuntu；D盘骨架/单元检查不冒充Ubuntu业务验收。
 
-以下内容**禁止代写**，只允许审查。若被要求代写，必须先拒绝并说明理由。
+## 1. 本人完成的核心
 
-| 红线 | 位置 | 为什么 |
+| 内容 | 位置 | AI边界 |
 |---|---|---|
-| **手写 Agent Loop** | `minimal_agent/` | 流式 NDJSON 的 tool_calls 累积、`role:tool` 报文、停止条件、失败回传是 M4 调 LangGraph 的唯一资本。这是整个学习路径的核心资产 |
-| **Verifier 检查逻辑与对抗性测试** | `verifier/`、`verifier/tests/` | 要求是"能发现 Tool 返回 12.34 而回答 13.24"。AI 写的检查只覆盖 AI 自己会犯的错，等于让出题人答题 |
-| **决策记录** | `docs/decisions/` | 记录的是人的判断。AI 能写出漂亮理由，但那是 AI 的观点，会让"独立思考留痕"失效 |
+| 手写Agent Loop | minimal_agent/runner.py | 本人编写，AI仅审查；不能用完整示例/框架替代 |
+| Verifier核心与对抗性测试 | verifier/checks、verifier/tests | 本人编写，AI仅审查 |
+| 个人决策记录 | docs/decisions | 本人判断与证据，AI仅审查 |
+| 安全判断/状态机 | security/tools/graph | 本人定边界与State，AI审查或按已确定接口填样板 |
 
-此外，**禁止**：修改或放宽已有的测试断言；放宽评测的 `success_criteria`；
-代写安全注入测试用例；擅自扩大范围重构能通过验收的代码。
+薄CLI启动、固定入口加载、序列化与样板测试允许AI协助；必须清楚区分一次入口调用与Loop控制逻辑。不修改/放宽已有正确测试或gold来迎合结果。错误断言修订需依据、人工审查、新数据版本与重跑；安全注入用例由本人设计。
 
----
+## 2. 只沿V顺序增加功能
 
-## 1. 允许与禁止
+V0环境→V1只读核心/本人Loop→V2第一网页→V3一个Crypto MCP→V4固定审批/恢复→V5知识与可靠性→V6完整实验/交付。目标编号与M任务前缀是稳定索引，依赖组名m1–m4不是执行阶段。先两只读工具，不开放任意shell/SQL/路径；新功能按当前切片开放，不为后续占位模块提前装全服务。
 
-### 可以放手（AI 写 + 人 review）
-- `infra/`（compose、Dockerfile）、CI 配置、`.gitignore`
-- 样板代码：Pydantic 模型、router 拆分、middleware、CRUD、日志封装
-- SQL DDL 的可执行版本、Alembic 配置
-- `web/`（前端不是学习能力目标，但**是最终交付界面**；AI 写 + 人 review）
-- 文档格式整理、索引生成
+V交付通过不自动签收技术全表，40技术表和81详细任务要求保持；专项标签条件见03。前端也是目标15：允许AI样板，学习者须理解接口、异步、审批、刷新/断线与安全渲染，并自己改交互与排错。
 
-### 协商（人定接口与验收，AI 填实现）
-- `packages/core/models.py` 的契约（改动需同步指南 `repo-structure.md`）
-- `packages/security/` 的策略落地（分级判断由人做）
-- `pipelines/retrieval/` 的消融开关（实验设计由人做）
-- State 字段设计、`interrupt()` 的节点拆分
+## 3. 接受与提交前检查
 
-### 只能审查
-- 红线三项
-- `tools/builtin/` 里的安全判断（路径白名单、参数校验的**边界**）
-- `graph/` 的状态机设计
-
----
-
-## 2. 每次接受 AI 代码的固定动作
-
-```
-[ ] git diff 检查测试文件有没有被改 —— 被改则逐行 review 为什么
-[ ] 真正跑测试，不是相信"应该能过"
-[ ] 跑 python3 scripts/selftest.py
-[ ] 改动涉及 Prompt/检索/工具/流程时，跑评测对比（指南 02-MODEL-AND-EVAL.md §9）
-[ ] 至少问一个审查问题（见 §3）
+```text
+[ ] 检查diff、测试/gold变化与影响范围
+[ ] selftest --stage 当前V --strict；pytest真实运行
+[ ] 改动文件ruff/type检查；记录已有基线问题，不用新改动扩大重构
+[ ] Prompt/模型/工具/检索/流程改变按02第9–10节相关回归
+[ ] 当前切片正常/失败/权限与真实副作用证据；未跑标未验证
+[ ] 本人解释、需求修改/排错；关键to-digest消化
 ```
 
-**判定 AI 改动是否接受**：
+普通合同/mock检查与专用Ollama/GPU/frozen评测分开。早期缺正式数据不捏造指标，用审定小case；V6补完整规模。实际越权任一失败阻止交付。模型比较固定环境/数据，阈值用pp并结合样本量/逐case/区间，不能机械套未审定的2pt。
 
-| 评测结果 | 决定 |
-|---|---|
-| Task Success 上升，其余不降 | 接受 |
-| Task Success 持平，延迟明显下降 | 接受 |
-| Task Success 下降 > 2pt | **拒绝**，要求解释哪类用例退化 |
-| Unauthorized Action Rate > 0 | **拒绝并回滚**，安全不妥协 |
-| Unsupported Claim Rate 上升 | 拒绝 |
+## 4. 工程合同
 
----
+- 保留packages/core成熟类型；core不导入app/业务/存储，依赖方向见STRUCTURE，自检查普通绝对/相对import。
+- ToolResult用Pydantic泛型、容器默认工厂，空结果success=True；预期业务失败结构化，意外异常由execute_tool分类，取消正确传播。
+- 模型工具调用仅走execute_tool，资源由可信身份/服务端ID解析；read_only=False保持retry=0。默认Policy不替代真实授权/审批。
+- 配置字段变更同步Settings与.env.example；不提交真实.env、材料、解密内容或日志，脱敏使用现有scrub。
+- 原生Ollama非流式先做，再NDJSON；前端V2 JSON/快照、V5 SSE，两套流解析分开。tool反馈遵守锁定版本实际报文。
+- 项目模块mcp_integration，第三方SDK仍mcp；stdout协议/stderr日志。Server复查本地权限与固定审批，不信任模型approved或annotation。
+- secrets/明文不进模型、State、ToolResult或浏览器日志。布局检查不是完整安全证明，动态导入/外部副作用需审查。
+- packages/app只加载固定minimal_agent.runner并调用一次，禁止加入规划、工具选择、循环或自动批准。
 
-## 3. 推荐的提问方式
-
-**审查代码（最高价值用法）**：
-```
-这是我写的 <模块>（附代码）。只做以下事，不要重写：
-1. 列出所有"假设输入合法"的地方，说明非法输入会发生什么
-2. 找出所有可能静默失败（不报错但结果错）的路径
-3. 指出 except 捕获过宽的位置
-4. 每项给一个能触发它的具体输入
-输出表格。不要夸奖，不要总结，不要给改进建议。
-```
-
-**对照验收标准**：
-```
-这是实现，这是验收要求（附上）。逐条判断"完全满足 / 表面满足但边界会破 / 不满足"。
-只输出判断表，不要给修改后的代码。
-```
-
-**检验理解（用于消化 docs/to-digest.md）**：
-```
-这段代码我标记为"未吃透"。扮演面试官，一次问一个问题检验我是否真懂，
-根据我的回答调整难度。不要提前告诉我答案。
-```
-
-**禁止的提问方式**：
-```
-✗ "你是资深 Agent 架构师，请设计我的 LangGraph State"
-   → 把判断权也外包了。正确做法：自己出方案，让 AI 当审查者。
-```
-
----
-
-## 4. 技术约定
-
-### 分层（由 `scripts/selftest.py` 强制）
-```
-packages/core  ← 无 IO；不 import services/graph/pipelines/tools/mcp/memory/verifier
-packages/llm   ← 只依赖 core
-packages/db    ← 只依赖 core
-pipelines/, tools/, mcp/, memory/, verifier/  ← 依赖 core (+ db)
-graph/         ← 依赖以上全部
-services/      ← 依赖以上全部
-```
-**不允许反向依赖。**
-
-### 契约
-- `ToolResult` 是 Pydantic 泛型，序列化用 `model_dump_json()`，**不用 dataclass**
-- 容器字段一律 `Field(default_factory=...)`
-- **空结果是 `success=True`**，不是失败
-- 工具 handler 不抛异常；异常由 `execute_tool` 转为 `ToolResult`
-- **所有工具调用必须走唯一执行入口 `execute_tool`**，不得直接调 `spec.handler`
-- `read_only=False` 的工具 `retry` 必须为 0（`ToolSpec` 有守卫）
-
-### 配置
-- 改配置必须**同时**改 `.env.example` 与 `packages/core/config.py`，否则 `selftest.py` 失败
-- `.env` 不进 git；`.env.example` 不含真实密钥
-- 密钥在日志中必须经 `packages/core/logging.py` 的 `scrub()` 脱敏
-
-### 外部协议
-- Ollama 原生 `/api/chat` 是 **NDJSON**；给前端的 `/chat` 是 **SSE**。**两层分开适配，不共用解析器**
-- 原生工具消息用 `role:tool` + `tool_name`；`call_id` 由应用生成，不依赖模型给的 id
-- **不要预设 arguments 是字符串 delta** —— 以锁定版本的实际 Trace 为准
-- MCP server 的**日志必须走 stderr**，stdout 是 JSON-RPC 协议通道
-
-### 环境
-- **全部实现在 Ubuntu 内完成**，Windows 不承担实现角色（只作浏览器客户端）
-- 仓库在 Ubuntu 的 ext4 上；**不要**把它移到 `/mnt/c`、`/mnt/d`
-- Ollama 是 Ubuntu 内的 systemd 服务，监听 `127.0.0.1:11434`；应用用**回环地址**访问，不再使用宿主 IP
-- Docker 是 Ubuntu 内原生 29.1.3，**没有也不需要** Docker Desktop
-- 前端/API 监听 `0.0.0.0` 供 Windows 浏览器访问；**Ollama/数据库/向量库一律绑回环**，不对外
-
----
-
-## 5. 命令
+## 5. 命令与理解记录
 
 ```bash
-python3 scripts/selftest.py     # 骨架自检（纯标准库）
-uv run pytest -q                # 测试
-uv run ruff check .             # 静态检查
-uv run mypy packages/           # 类型检查
+python3 scripts/selftest.py --stage V1 --strict
+python -m pytest -q
+python -m ruff check packages/app tests/test_entry.py scripts/selftest.py
+python -m mypy packages/app
 ```
 
-提交前必须 `selftest.py` 与 `pytest` 均通过。
-
----
-
-## 6. 不理解就记账
-
-接受但未完全消化的代码，记入 `docs/to-digest.md`：
-
-```markdown
-| 文件 | 加入日期 | 为什么没吃透 | 计划消化时间 |
-|---|---|---|---|
-| pipelines/retrieval/fusion.py | 2026-10-20 | RRF 的 k 值含义没搞清 | M3 结束前 |
-```
-
-**每阶段结束必须清空。** 清单为空说明在自欺；只增不减说明在堆技术债。
-
-**接受 AI 代码前的四问**（任一"不能"就记账）：
-1. 不看代码，能画出它的流程图吗？
-2. 能说出它故意没做什么吗？
-3. 能构造一个让它失败的输入吗？
-4. 删掉它，能重写出来吗？
+新增业务跑其相关单元/集成/Provider与失败验证；全仓lint/type已知基线缺口如实记录。to-digest空可以表示已理解，不代表自欺；不断增长要安排消化。本阶段关键协议/安全项不能延期，其余按计划期限补齐。ADR本人写，不能为提交由AI编理由。

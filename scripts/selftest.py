@@ -4,11 +4,11 @@
 作用：在 uv sync 之前就能验证仓库骨架是否自洽，也可以在 CI 与
 "干净 clone 后"作为第一道门禁。
 
-它同时是本仓库**目录布局的权威定义**：EXPECTED_DIRS 就是架构契约。
+它同时是本仓库**目录布局的权威定义**：docs/layout.json就是阶段目录契约。
 
 用法：
     python scripts/selftest.py
-    python scripts/selftest.py --strict 检查   # 把 WARN 也当失败
+    python scripts/selftest.py --stage V1 --strict   # 把 WARN 也当失败
 
 退出码：0 通过；1 有 FAIL。
 """
@@ -17,6 +17,7 @@ from __future__ import annotations
 
 import argparse
 import ast
+import json
 import re
 import sys
 from pathlib import Path
@@ -25,46 +26,66 @@ REPO = Path(__file__).resolve().parent.parent
 
 # ---------------------------------------------------------------- 目录契约
 # 每个条目：路径 -> 负责的里程碑。这就是 docs/STRUCTURE.md 的可执行版本。
-EXPECTED_DIRS: dict[str, str] = {
-    "packages/core": "Phase0/M1 纯逻辑层",
-    "packages/llm": "M1 Ollama 客户端",
-    "packages/db": "M2 数据库",
-    "packages/db/repository": "M2 CRUD",
-    "packages/db/queries": "M2 六个验收查询",
-    "packages/security": "M1 起策略/RBAC/sandbox/审计",
-    "tools/builtin": "M1 五个工具",
-    "tools/tests": "M1 工具测试",
-    "minimal_agent": "M1 手写 Loop（红线：必须自己写）",
-    "minimal_agent/traces": "M1 原始 NDJSON 报文证据",
-    "pipelines/ingest": "M3 入库",
-    "pipelines/retrieval": "M3 检索与消融",
-    "pipelines/citation": "M3 引用构造",
-    "mcp/server_fs": "M4 File MCP",
-    "mcp/server_db": "M4 Database MCP",
-    "mcp/server_domain": "M4 Domain MCP",
-    "mcp/client": "M4 动态发现",
-    "graph/nodes": "M4 LangGraph 节点",
-    "memory": "M5 长期记忆",
-    "verifier/checks": "M4 最小检查 / M5 完整验证",
-    "verifier/tests": "M5 对抗性测试（红线：必须自己写）",
-    "eval/datasets": "M3 起数据集",
-    "services/agent-api/routers": "M2 FastAPI",
-    "services/agent-worker": "M2 长任务",
-    "tests": "端到端集成测试",
-    "docs/decisions": "每阶段决策记录",
-    "infra": "M2 基础设施",
-    "scripts": "校验脚本",
-}
+STAGES = tuple(f"V{i}" for i in range(7))
+LAYOUT_FILE = REPO / "docs/layout.json"
 
 # ---------------------------------------------------------------- 分层契约
 # key 不允许 import value 里的顶层包。
 LAYERING: dict[str, set[str]] = {
-    "packages/core": {"services", "graph", "pipelines", "tools", "mcp",
-                      "memory", "verifier", "packages.llm", "packages.db"},
-    "packages/llm": {"services", "graph", "pipelines", "tools", "mcp",
-                     "memory", "verifier", "packages.db"},
-    "packages/db": {"services", "graph", "pipelines", "tools", "mcp",
-                    "memory", "verifier"},
+    "packages/core": {
+        "services",
+        "graph",
+        "pipelines",
+        "tools",
+        "mcp",
+        "mcp_integration",
+        "minimal_agent",
+        "packages.app",
+        "memory",
+        "verifier",
+        "packages.llm",
+        "packages.db",
+        "packages.crypto",
+        "packages.security",
+    },
+    "packages/llm": {
+        "services",
+        "graph",
+        "pipelines",
+        "tools",
+        "mcp",
+        "mcp_integration",
+        "minimal_agent",
+        "packages.app",
+        "memory",
+        "verifier",
+        "packages.db",
+    },
+    "packages/db": {
+        "services",
+        "graph",
+        "pipelines",
+        "tools",
+        "mcp",
+        "mcp_integration",
+        "minimal_agent",
+        "packages.app",
+        "memory",
+        "verifier",
+    },
+}
+
+LAYERING["packages/crypto"] = {
+    "packages.app",
+    "packages.llm",
+    "services",
+    "graph",
+    "minimal_agent",
+    "pipelines",
+    "mcp_integration",
+    "memory",
+    "verifier",
+    "tools",
 }
 
 # ---------------------------------------------------------------- 基本清单
@@ -75,6 +96,10 @@ REQUIRED_FILES = [
     "README.md",
     "AGENTS.md",
     "docs/STRUCTURE.md",
+    "docs/CORE-FIRST.md",
+    "docs/layout.json",
+    "packages/app/cli.py",
+    "packages/app/__main__.py",
     "scripts/selftest.py",
     "packages/core/models.py",
     "packages/core/config.py",
@@ -110,18 +135,47 @@ def warn(check: str, detail: str) -> None:
 
 
 # ---------------------------------------------------------------- 检查项
-def check_layout() -> None:
-    missing = [d for d in EXPECTED_DIRS if not (REPO / d).is_dir()]
-    if missing:
-        fail("目录布局", f"缺少 {len(missing)} 个目录: {', '.join(missing[:6])}")
-    else:
-        ok("目录布局", f"{len(EXPECTED_DIRS)} 个契约目录齐全")
+def check_layout(stage: str = "V1") -> None:
+    try:
+        manifest = json.loads(LAYOUT_FILE.read_text(encoding="utf-8"))
+        if manifest["schema_version"] != 1 or manifest["stages"] != list(STAGES):
+            raise ValueError("layout schema/stages mismatch")
+        if manifest["default_stage"] != "V1":
+            raise ValueError("default stage mismatch")
+        entries = manifest["directories"]
+        seen: set[str] = set()
+        expected: list[str] = []
+        structure = (REPO / "docs/STRUCTURE.md").read_text(encoding="utf-8")
+        for entry in entries:
+            path, introduced = entry["path"], entry["stage"]
+            resolved = (REPO / path).resolve()
+            if not resolved.is_relative_to(REPO.resolve()) or path.casefold() in seen:
+                raise ValueError("unsafe or duplicate layout path")
+            seen.add(path.casefold())
+            if introduced not in STAGES or f"`{path}/`" not in structure:
+                raise ValueError("unknown stage or directory missing from STRUCTURE")
+            if STAGES.index(introduced) <= STAGES.index(stage):
+                expected.append(path)
+        if not expected:
+            raise ValueError("empty stage layout")
+    except (OSError, ValueError, KeyError, TypeError):
+        fail("目录契约", "无法解析layout或与STRUCTURE不一致")
+        return
 
-    absent = [f for f in REQUIRED_FILES if not (REPO / f).is_file()]
+    missing = [path for path in expected if not (REPO / path).is_dir()]
+    if missing:
+        fail("目录布局", f"{stage}缺少目录: {', '.join(missing)}")
+    else:
+        ok("目录布局", f"{stage}的{len(expected)}个当前目录齐全；后续功能未据此验收")
+    if (REPO / "mcp").exists():
+        fail("SDK命名", "项目MCP目录应为mcp_integration，避免遮蔽SDK")
+    else:
+        ok("SDK命名", "项目包mcp_integration与SDK mcp分开")
+    absent = [name for name in REQUIRED_FILES if not (REPO / name).is_file()]
     if absent:
         fail("必备文件", f"缺少: {', '.join(absent)}")
     else:
-        ok("必备文件", f"{len(REQUIRED_FILES)} 个文件齐全")
+        ok("必备文件", f"{len(REQUIRED_FILES)}个文件齐全")
 
 
 def _settings_fields() -> set[str]:
@@ -176,7 +230,10 @@ def check_secrets() -> None:
     for path in REPO.rglob("*"):
         if not path.is_file() or path.name == "selftest.py":
             continue
-        if any(part in {".git", ".venv", "__pycache__", "data"} for part in path.parts):
+        if any(
+            part in {".git", ".venv", ".check-deps", "__pycache__", "data", "tmp"}
+            for part in path.parts
+        ):
             continue
         if path.suffix not in {".py", ".toml", ".json", ".yaml", ".yml", ".env", ".example", ".md"}:
             continue
@@ -213,8 +270,23 @@ def _module_name(path: Path) -> str | None:
     return ".".join(parts) if parts else None
 
 
+def _imported_modules(node: ast.AST, path: Path) -> list[str]:
+    if isinstance(node, ast.Import):
+        return [alias.name for alias in node.names]
+    if not isinstance(node, ast.ImportFrom):
+        return []
+    module = node.module or ""
+    if node.level:
+        package = (_module_name(path) or "").split(".")
+        if path.name != "__init__.py":
+            package = package[:-1]
+        keep = len(package) - node.level + 1
+        module = ".".join(package[: max(keep, 0)] + ([module] if module else []))
+    return [module] + [f"{module}.{alias.name}" for alias in node.names if alias.name != "*"]
+
+
 def check_layering() -> None:
-    """分层护栏：core 不得 import 上层模块。"""
+    """Check regular absolute and relative imports; dynamic loading needs review."""
     violations: list[str] = []
     for owner, banned in LAYERING.items():
         owner_dir = REPO / owner
@@ -227,20 +299,13 @@ def check_layering() -> None:
                 fail("语法", f"{py.relative_to(REPO)}: {exc}")
                 continue
             for node in ast.walk(tree):
-                mods: list[str] = []
-                if isinstance(node, ast.Import):
-                    mods = [a.name for a in node.names]
-                elif isinstance(node, ast.ImportFrom) and node.module:
-                    mods = [node.module]
-                for mod in mods:
-                    root = mod.split(".")[0]
-                    full = mod
-                    if root in banned or full in banned:
-                        violations.append(f"{py.relative_to(REPO)} -> {mod}")
+                for module in _imported_modules(node, py):
+                    if any(module == b or module.startswith(b + ".") for b in banned):
+                        violations.append(f"{py.relative_to(REPO)} -> {module}")
     if violations:
-        fail("分层护栏", f"{len(violations)} 处反向依赖: {violations[0]}")
+        fail("分层护栏", f"{len(violations)}处反向依赖: {violations[0]}")
     else:
-        ok("分层护栏", "core/llm/db 无反向依赖")
+        ok("分层护栏", "core/llm/db/crypto无普通反向import")
 
 
 def check_tool_spec_guard() -> None:
@@ -250,8 +315,15 @@ def check_tool_spec_guard() -> None:
         fail("工具契约", "models.py 不存在")
         return
     text = path.read_text(encoding="utf-8")
-    needed = ["read_only", "retry", "risk_level", "input_schema",
-              "output_schema", "timeout_s", "permission"]
+    needed = [
+        "read_only",
+        "retry",
+        "risk_level",
+        "input_schema",
+        "output_schema",
+        "timeout_s",
+        "permission",
+    ]
     missing = [n for n in needed if n not in text]
     if missing:
         fail("工具契约", f"ToolSpec 缺少字段: {', '.join(missing)}")
@@ -268,7 +340,7 @@ def check_pyproject() -> None:
         fail("pyproject", "不存在")
         return
     text = path.read_text(encoding="utf-8")
-    for key in ('name =', 'version =', 'requires-python ='):
+    for key in ("name =", "version =", "requires-python ="):
         if key not in text:
             fail("pyproject", f"缺少 {key.strip()}")
             return
@@ -308,9 +380,11 @@ def check_ollama_endpoint() -> None:
 def main() -> int:
     ap = argparse.ArgumentParser(description="骨架自检（纯标准库）")
     ap.add_argument("--strict", action="store_true", help="把 WARN 也视为失败")
+    ap.add_argument("--stage", choices=STAGES, default="V1", help="当前交付阶段目录")
     args = ap.parse_args()
+    results.clear()
 
-    check_layout()
+    check_layout(args.stage)
     check_pyproject()
     check_config_parity()
     check_secrets()
