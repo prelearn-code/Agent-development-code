@@ -1,6 +1,6 @@
 # 代码布局与逐步扩展
 
-V0–V6是交付顺序，16目标与M任务前缀用于验收索引。当前布局数据在[layout.json](layout.json)，`scripts/selftest.py --stage V1`检查当前目录和本文覆盖；未来模块仍保留位置，不要求第一天实现。工程字段以同级指南[repo-structure](../../Agent-development-doc/reference/repo-structure.md)为准。
+V0–V6是交付顺序，16目标与M任务前缀用于验收索引。当前布局数据在[layout.json](layout.json)，`scripts/selftest.py --stage V1`检查当前目录和本文覆盖；未来模块仍保留位置，不要求第一天实现。工程字段以同级指南[V1工具合同](../../Agent-development-doc/stages/V1-CORE-DEMO.md#contract-4)与[V2数据库合同](../../Agent-development-doc/stages/V2-WEB.md#contract-3)为准。
 
 ## 1. 先关注核心文件
 

@@ -1,6 +1,6 @@
 # 密码工具 Agent 开发仓库
 
-按[学习总览](../Agent-development-doc/LEARNING-PATH.md)的**V0环境→V1核心调用→V2基础网页→V3一个MCP→V4审批/恢复→V5知识与可靠性→V6完整实验/交付**推进。目标1–16、P0/M任务ID是技术验收索引，完整标准与步骤在同级文档仓库。
+按[Roadmap](../Agent-development-doc/ROADMAP.md)的**V0环境→V1核心调用→V2基础网页→V3一个MCP→V4审批/恢复→V5知识与可靠性→V6完整实验/交付**推进。目标1–16、P0/M任务ID是技术验收索引，完整标准与步骤在同级文档仓库。
 
 先关注`packages/core`、`packages/crypto`、`tools`、`packages/llm`、`minimal_agent`和薄入口`packages/app`。后续扩展位置已保留，目录存在不代表功能完成。当前已实现：核心类型/配置/日志、CLI入口适配与骨架检查；证书/摘要工具、执行器、LLM客户端和手写Loop仍待你实施。
 
@@ -58,7 +58,7 @@ python -m pytest -q
 | V5 | RAG/引用/完整Verifier/Memory/SSE | pipelines/memory/verifier/API/Web |
 | V6 | 补工具/MCP/六查询、实验/安全、完整前端/部署 | 现有模块逐项补齐，worker按需 |
 
-`phase0-done`、`m1-done`等专项标签须技术全表通过；V3单Server不等于完整MCP，V2网页不等于目标15毕业。交付与切片预算见[学习计划](../Agent-development-doc/LEARNING-PATH.md)。
+`phase0-done`、`m1-done`等专项标签须技术全表通过；V3单Server不等于完整MCP，V2网页不等于目标15毕业。交付与切片预算见[学习计划](../Agent-development-doc/ROADMAP.md)。
 
 ## 4. 依赖组保持兼容，按需引入
 

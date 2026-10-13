@@ -1,6 +1,6 @@
 # 先写一条可运行的核心链
 
-当前CLI已经能启动与报告状态，真实密码工具、执行器、LLM客户端和Loop尚未实现。本文件给你先动手的范围，完整目标、技术标准和步骤集中在[V1阶段指南](../../Agent-development-doc/stages/V1-CORE-DEMO.md)；全程顺序见[学习总览](../../Agent-development-doc/LEARNING-PATH.md)。
+当前CLI已经能启动与报告状态，真实密码工具、执行器、LLM客户端和Loop尚未实现。本文件给你先动手的范围，完整目标、技术标准和步骤集中在[V1阶段指南](../../Agent-development-doc/stages/V1-CORE-DEMO.md)；全程顺序见[Roadmap](../../Agent-development-doc/ROADMAP.md)。
 
 ## 1. 当前可执行与待实现
 
@@ -59,7 +59,7 @@ python -m packages.app run --question '计算教学文件 sample.txt 的 SHA-256
 
 ## 4. 保持当前类型，登记后续差异
 
-ToolSpec目前是name/retry，ToolResult是citations；目标version/idempotent/通用evidence_refs按指南结构文档§4.1逐步迁移，不要求第一天重写成熟接口。Citation旧页码说明不能作为±1统一容差的验收规则，实际定位按版本/真实区间；DEFAULT_POLICY是教学起点，破坏操作仍按业务范围默认禁止，不能直接将枚举策略当资源授权。
+ToolSpec目前是name/retry，ToolResult是citations；目标version/idempotent/通用evidence_refs按[V1工程合同与当前类型映射](../../Agent-development-doc/stages/V1-CORE-DEMO.md#contract-4)逐步迁移，不要求第一天重写成熟接口。Citation旧页码说明不能作为±1统一容差的验收规则，实际定位按版本/真实区间；DEFAULT_POLICY是教学起点，破坏操作仍按业务范围默认禁止，不能直接将枚举策略当资源授权。
 
 先完成真实工具，再工具反馈，再本人Loop。AI可以做入口/样板与审查，核心Loop、Verifier/对抗测试、个人ADR本人写，State和安全边界本人设计。目录占位、入口status或本次单元测试不签收这些业务目标。
 

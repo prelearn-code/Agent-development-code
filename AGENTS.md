@@ -1,10 +1,10 @@
 # AI协作与阶段要求
 
-以同级[AI协作原则](../Agent-development-doc/reference/07-AGENT-SYSTEM-DESIGN.md#ai-assistance)、[学习总览](../Agent-development-doc/LEARNING-PATH.md)和[当前阶段](../Agent-development-doc/stages/V1-CORE-DEMO.md)为依据，验收包含人的解释、独立修改、排错与真实证据。
+以同级[AI协作原则](../Agent-development-doc/README.md#ai-assistance)、[Roadmap](../Agent-development-doc/ROADMAP.md)和[当前阶段](../Agent-development-doc/stages/V1-CORE-DEMO.md)为依据，验收包含人的解释、独立修改、排错与真实证据。
 
 ## 0. 当前授权与执行位置
 
-本次只修改`D:\work\Agent-development-code`并更新远端；**不得直接读写、拉取、安装或运行用户的WSL仓库**，WSL由用户自行同步。未来仅按人明确指定的仓库操作。学习项目的模型/密码业务、依赖构建与服务运行仍安排在Ubuntu；D盘骨架/单元检查不冒充Ubuntu业务验收。
+本次文档统一只调整`D:\work\Agent-development-doc`及`D:\work\Agent-development-code`的相关阅读导航并更新远端；**不得直接读写、拉取、安装或运行用户的WSL仓库**，WSL由用户自行同步。未来仅按人明确指定的仓库操作。学习项目的模型/密码业务、依赖构建与服务运行仍安排在Ubuntu；D盘骨架/单元检查不冒充Ubuntu业务验收。
 
 ## 1. 本人完成的核心
 
@@ -21,7 +21,7 @@
 
 V0环境→V1只读核心/本人Loop→V2第一网页→V3一个Crypto MCP→V4固定审批/恢复→V5知识与可靠性→V6完整实验/交付。目标编号与M任务前缀是稳定索引，依赖组名m1–m4不是执行阶段。先单摘要工具Demo，再扩展两只读工具，不开放任意shell/SQL/路径；新功能按当前切片开放，不为后续占位模块提前装全服务。
 
-V交付通过不自动签收技术全表，40技术表和81详细任务要求保持；专项标签条件见学习总览。前端也是目标15：允许AI样板，学习者须理解接口、异步、审批、刷新/断线与安全渲染，并自己改交互与排错。
+V交付通过不自动签收技术全表，原40技术标准表和81详细任务要求保持；新增各阶段技术/结果要求表与本人关键问题；专项标签条件见Roadmap。前端也是目标15：允许AI样板，学习者须理解接口、异步、审批、刷新/断线与安全渲染，并自己改交互与排错。
 
 ## 3. 接受与提交前检查
 
@@ -29,7 +29,7 @@ V交付通过不自动签收技术全表，40技术表和81详细任务要求保
 [ ] 检查diff、测试/gold变化与影响范围
 [ ] selftest --stage 当前V --strict；pytest真实运行
 [ ] 改动文件ruff/type检查；记录已有基线问题，不用新改动扩大重构
-[ ] Prompt/模型/工具/检索/流程改变按02第9–10节相关回归
+[ ] Prompt/模型/工具/检索/流程改变按V6的实验协议与小批验证章节相关回归
 [ ] 当前切片正常/失败/权限与真实副作用证据；未跑标未验证
 [ ] 本人解释、需求修改/排错；关键to-digest消化
 ```
