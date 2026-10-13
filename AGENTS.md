@@ -1,6 +1,6 @@
 # AI协作与阶段要求
 
-以同级[04协作原则](../Agent-development-doc/04-AI-ASSISTED-DEV.md)、[00主路径](../Agent-development-doc/00-ROADMAP.md)和[05步骤](../Agent-development-doc/05-UBUNTU-STEP-BY-STEP.md)为依据，验收包含人的解释、独立修改、排错与真实证据。
+以同级[AI协作原则](../Agent-development-doc/reference/07-AGENT-SYSTEM-DESIGN.md#ai-assistance)、[学习总览](../Agent-development-doc/LEARNING-PATH.md)和[当前阶段](../Agent-development-doc/stages/V1-CORE-DEMO.md)为依据，验收包含人的解释、独立修改、排错与真实证据。
 
 ## 0. 当前授权与执行位置
 
@@ -19,9 +19,9 @@
 
 ## 2. 只沿V顺序增加功能
 
-V0环境→V1只读核心/本人Loop→V2第一网页→V3一个Crypto MCP→V4固定审批/恢复→V5知识与可靠性→V6完整实验/交付。目标编号与M任务前缀是稳定索引，依赖组名m1–m4不是执行阶段。先两只读工具，不开放任意shell/SQL/路径；新功能按当前切片开放，不为后续占位模块提前装全服务。
+V0环境→V1只读核心/本人Loop→V2第一网页→V3一个Crypto MCP→V4固定审批/恢复→V5知识与可靠性→V6完整实验/交付。目标编号与M任务前缀是稳定索引，依赖组名m1–m4不是执行阶段。先单摘要工具Demo，再扩展两只读工具，不开放任意shell/SQL/路径；新功能按当前切片开放，不为后续占位模块提前装全服务。
 
-V交付通过不自动签收技术全表，40技术表和81详细任务要求保持；专项标签条件见03。前端也是目标15：允许AI样板，学习者须理解接口、异步、审批、刷新/断线与安全渲染，并自己改交互与排错。
+V交付通过不自动签收技术全表，40技术表和81详细任务要求保持；专项标签条件见学习总览。前端也是目标15：允许AI样板，学习者须理解接口、异步、审批、刷新/断线与安全渲染，并自己改交互与排错。
 
 ## 3. 接受与提交前检查
 

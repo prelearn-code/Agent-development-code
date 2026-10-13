@@ -1,6 +1,6 @@
 # 代码布局与逐步扩展
 
-V0–V6是交付顺序，16目标与M任务前缀用于验收索引。当前布局数据在[layout.json](layout.json)，`scripts/selftest.py --stage V1`检查当前目录和本文覆盖；未来模块仍保留位置，不要求第一天实现。工程字段以同级指南[repo-structure](../../Agent-development-doc/repo-structure.md)为准。
+V0–V6是交付顺序，16目标与M任务前缀用于验收索引。当前布局数据在[layout.json](layout.json)，`scripts/selftest.py --stage V1`检查当前目录和本文覆盖；未来模块仍保留位置，不要求第一天实现。工程字段以同级指南[repo-structure](../../Agent-development-doc/reference/repo-structure.md)为准。
 
 ## 1. 先关注核心文件
 
@@ -21,7 +21,7 @@ minimal_agent/
 tests/                        已有入口测试，后续增加合同/集成
 ```
 
-第一条业务：直接证书/摘要→registry/execute_tool→单tool反馈→有限手写Loop。没有业务代码时`run`报未实现；不返回伪造证书、摘要或成功。实际实施清单见[CORE-FIRST](CORE-FIRST.md)。
+第一条业务：直接摘要→registry/execute_tool→单tool反馈→本人有限Loop形成Demo，再添加证书工具。没有业务代码时`run`报未实现；不返回伪造证书、摘要或成功。启动合同见[CORE-FIRST](CORE-FIRST.md)，详细实现目标与标准见[V1阶段](../../Agent-development-doc/stages/V1-CORE-DEMO.md)。
 
 ## 2. 保留的目录与引入时机
 

@@ -1,6 +1,6 @@
 # 密码工具 Agent 开发仓库
 
-按[主学习路径](../Agent-development-doc/00-ROADMAP.md)的**V0环境→V1核心调用→V2基础网页→V3一个MCP→V4审批/恢复→V5知识与可靠性→V6完整实验/交付**推进。目标1–16、P0/M任务ID是技术验收索引，完整标准与步骤在同级文档仓库。
+按[学习总览](../Agent-development-doc/LEARNING-PATH.md)的**V0环境→V1核心调用→V2基础网页→V3一个MCP→V4审批/恢复→V5知识与可靠性→V6完整实验/交付**推进。目标1–16、P0/M任务ID是技术验收索引，完整标准与步骤在同级文档仓库。
 
 先关注`packages/core`、`packages/crypto`、`tools`、`packages/llm`、`minimal_agent`和薄入口`packages/app`。后续扩展位置已保留，目录存在不代表功能完成。当前已实现：核心类型/配置/日志、CLI入口适配与骨架检查；证书/摘要工具、执行器、LLM客户端和手写Loop仍待你实施。
 
@@ -16,7 +16,7 @@ python3 -m packages.app status
 `status`只检查入口与学习者文件是否存在，不调用模型、网络或密码操作，始终不声称业务已验证。它可在安装第三方依赖前运行。当前运行下面命令会明确返回`learner_entry_missing`和退出码2，因为本人手写的runner尚未实现：
 
 ```bash
-python3 -m packages.app run --question '检查教学证书的有效期'
+python3 -m packages.app run --question '计算教学文件 sample.txt 的 SHA-256 摘要'
 ```
 
 本人创建`minimal_agent/runner.py`并实现`async run(*, question: str) -> dict[str, object]`后，同一个命令会调用它一次并打印JSON；CLI不实现模型循环、选工具、授权或重试。返回0表示入口正常返回JSON，不替代任务成功谓词；业务失败与状态由实际结果解释。详见[从核心开始](docs/CORE-FIRST.md)。
@@ -58,7 +58,7 @@ python -m pytest -q
 | V5 | RAG/引用/完整Verifier/Memory/SSE | pipelines/memory/verifier/API/Web |
 | V6 | 补工具/MCP/六查询、实验/安全、完整前端/部署 | 现有模块逐项补齐，worker按需 |
 
-`phase0-done`、`m1-done`等专项标签须技术全表通过；V3单Server不等于完整MCP，V2网页不等于目标15毕业。交付与切片预算见[学习计划](../Agent-development-doc/03-LEARNING-ORDER.md)。
+`phase0-done`、`m1-done`等专项标签须技术全表通过；V3单Server不等于完整MCP，V2网页不等于目标15毕业。交付与切片预算见[学习计划](../Agent-development-doc/LEARNING-PATH.md)。
 
 ## 4. 依赖组保持兼容，按需引入
 
@@ -88,4 +88,4 @@ python -m mypy packages/app
 - [STRUCTURE](docs/STRUCTURE.md)：目录职责、分层和扩展时机。
 - [AGENTS](AGENTS.md)：AI协作与本人手写边界。
 - [同步说明](docs/GIT-SYNC.md)：只在用户指定仓库修改，WSL用户自行拉取。
-- [完整步骤](../Agent-development-doc/05-UBUNTU-STEP-BY-STEP.md)：技术标准、81任务与86入口导航。
+- [V1实施指南](../Agent-development-doc/stages/V1-CORE-DEMO.md)：先摘要Demo，再补完整核心；其他阶段与原M任务查学习总览。

@@ -1,6 +1,6 @@
 # 环境实测记录
 
-> 依据：指南 [01-ENVIRONMENT.md](../../Agent-development-doc/01-ENVIRONMENT.md) §8。
+> 依据：指南 [01-ENVIRONMENT.md](../../Agent-development-doc/reference/01-ENVIRONMENT.md) §8。
 > **环境改变必须建新实验，不修改旧结果。**
 > 全部数值在 **Ubuntu 内**取得；Windows 只是浏览器客户端，不产生环境数值。
 

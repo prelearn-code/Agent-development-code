@@ -1,6 +1,6 @@
 # 先写一条可运行的核心链
 
-当前CLI已经能启动与报告状态，真实密码工具、执行器、LLM客户端和Loop尚未实现。本文件给你先动手的范围，完整技术标准仍见[00](../../Agent-development-doc/00-ROADMAP.md)与[05](../../Agent-development-doc/05-UBUNTU-STEP-BY-STEP.md)。
+当前CLI已经能启动与报告状态，真实密码工具、执行器、LLM客户端和Loop尚未实现。本文件给你先动手的范围，完整目标、技术标准和步骤集中在[V1阶段指南](../../Agent-development-doc/stages/V1-CORE-DEMO.md)；全程顺序见[学习总览](../../Agent-development-doc/LEARNING-PATH.md)。
 
 ## 1. 当前可执行与待实现
 
@@ -13,20 +13,20 @@
 | minimal_agent/runner.py | 本人手写，当前不存在 | 消息反馈、Loop停止/预算/失败须本人掌握 |
 | MCP/API/Graph/知识与前端 | 保留扩展位置 | 按V2–V6开放，不阻塞最初核心 |
 
-## 2. V1具体写文件的顺序
+## 2. 先完成摘要Agent Demo
 
-| 顺序/任务 | 文件或职责 | 本人必须做到 | 独立证据 |
-|---|---|---|---|
-| 1 M1 01 | 阅读packages/core/models.py | 解释ToolCall/ToolSpec/ToolResult及空结果成功、错误类型 | 正常/空/失败序列化说明 |
-| 2 M1 02–03 | packages/crypto/providers/openssl_cli.py | 固定程序/参数，直接解析公开证书/计算摘要；超时清理 | CLI/已知向量对照与真实版本 |
-| 3 M1 02–05 | tools/builtin/inspect_certificate.py、digest_file.py | 结构化输入输出，资源ID服务端解析，异常分类/日志脱敏 | 正常/坏输入/资源拒绝，不显示秘密 |
-| 4 M1 04 | tools/registry.py、executor.py；packages/security | 本人定义参数/归属/允许范围，唯一execute_tool入口 | 未知工具、非法/越权拒绝且adapter未调用 |
-| 5 M1 07 | tools/tests/ | 先只读行为独立验证；写操作到V4再补 | 实际断言，不靠测试数量 |
-| 6 M1 08–10 | packages/llm/client.py | 非流式请求，保存原生tool_calls与真实tool反馈 | 原始消息逐条说明 |
-| 7 M1 11–13 | minimal_agent/runner.py | 本人手写有限Loop、停止原因、预算与NDJSON | 单/多调用、失败、重复、超预算Trace |
-| 8 V1出口 | 通过已有app入口运行 | 相同question调用本人run一次，最终JSON绑定实际结果 | 自己改一需求/排错后回归 |
+按[V1第一个Demo](../../Agent-development-doc/stages/V1-CORE-DEMO.md#first-demo)执行：直接摘要 → 注册/校验 → 模型工具提议 → 真实结果反馈 → 本人有限Loop → CLI运行。先一个digest_file，摘要Demo通过后加inspect_certificate，最后补完整V1预算/多调用/NDJSON。详细任务和掌握标准只在阶段指南维护。
 
-V1先两个只读工具，AEAD练习M1 06到V4。GmSSL先能力核对与SM3补齐，暂时不可用明确记录，不伪装成OpenSSL同名结果。固定profile、key/nonce/写审批等在开放写工具前完成，不能提前裸加密。
+| 当前Demo职责 | 实现位置 |
+|---|---|
+| 固定OpenSSL摘要适配器 | packages/crypto/providers/openssl_cli.py |
+| 摘要参数与结构化结果 | tools/builtin/digest_file.py |
+| 固定工具注册、资源与参数校验、唯一执行入口 | tools/registry.py、tools/executor.py、packages/security |
+| 正常与相关失败验证 | tools/tests/test_digest_file.py |
+| 非流式模型请求/原生工具反馈 | packages/llm/client.py |
+| 本人手写Loop及run入口 | minimal_agent/runner.py，当前不存在，AI只审查 |
+
+AEAD、key/nonce/审批在V4；GmSSL先能力核对，后补SM3。未验证能力明确记录，不伪装成OpenSSL同名结果。
 
 ## 3. 入口合同，不提供Loop实现
 
@@ -52,7 +52,7 @@ V1命令入口用于教学单用户；V2服务端创建Run并鉴权后，需要�
 
 ```bash
 python -m packages.app status
-python -m packages.app run --question '检查授权教学证书的有效期'
+python -m packages.app run --question '计算教学文件 sample.txt 的 SHA-256 摘要'
 ```
 
 未创建runner时第二条应失败，不用空回答使它看似通过。依赖缺失与加载错误按error区分，在自己的测试和脱敏日志定位；不把异常/配置秘密粘给模型。
