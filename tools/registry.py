@@ -25,19 +25,13 @@ def validate_tool_arguments(
         }
 
     schema = function["parameters"]
-    # 缺失项使用空字符串；ID 字段兼容模型偶尔生成的占位词。
-    missing_id_values = {"待补充", "待提供", "未提供", "未知", "unknown", "none", "null"}
+    # 必填参数缺失（含只给了空白字符串）由 schema 层拒绝；
+    # 占位词是否合法属于业务判断，交给工具自身（如 keystore 的 unknown_key）。
     missing = [
         key
         for key in schema.get("required", [])
         if key not in arguments
-        or (
-            isinstance(arguments[key], str)
-            and (
-                not arguments[key].strip()
-                or (key.endswith("_id") and arguments[key].strip().casefold() in missing_id_values)
-            )
-        )
+        or (isinstance(arguments[key], str) and not arguments[key].strip())
     ]
     if missing:
         return {

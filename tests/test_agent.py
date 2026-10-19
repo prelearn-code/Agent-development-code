@@ -43,10 +43,6 @@ def tools() -> list[dict[str, Any]]:
         ({"file_id": "file_001"}, "missing_arguments"),
         ({"file_id": "file_001", "key_id": ""}, "missing_arguments"),
         ({"file_id": "file_001", "key_id": "  "}, "missing_arguments"),
-        ({"file_id": "file_001", "key_id": "待补充"}, "missing_arguments"),
-        ({"file_id": "file_001", "key_id": " 待提供 "}, "missing_arguments"),
-        ({"file_id": "file_001", "key_id": "未提供"}, "missing_arguments"),
-        ({"file_id": "file_001", "key_id": "UNKNOWN"}, "missing_arguments"),
         ({"file_id": "file_001", "key_id": 123}, "invalid_arguments"),
         ({"file_id": "file_001", "key_id": None}, "invalid_arguments"),
         ([], "invalid_arguments"),
@@ -100,6 +96,21 @@ async def test_no_arguments_tool_accepts_empty_object(
     session.call_tool.assert_awaited_once_with("sm2_generate_key", arguments={})
 
 
+@pytest.mark.asyncio
+async def test_placeholder_word_is_judged_by_tool_not_schema(
+    tools: list[dict[str, Any]],
+) -> None:
+    """占位词是合法字符串：schema 不再黑名单拦截，由业务层返回 unknown_key。"""
+    session = AsyncMock()
+    session.call_tool.return_value = CallToolResult(
+        content=[], structured_content={"ok": False, "error": "unknown_key"}
+    )
+    arguments = {"file_id": "file_001", "key_id": "待补充"}
+    result = await executor.execute_tool(session, "sm2_sign_message", arguments, tools)
+    session.call_tool.assert_awaited_once_with("sm2_sign_message", arguments=arguments)
+    assert result == {"ok": False, "error": "unknown_key"}
+
+
 def test_schema_constraints_apply_to_other_tools() -> None:
     tools = [
         {
@@ -122,7 +133,7 @@ def test_schema_constraints_apply_to_other_tools() -> None:
 
 
 @pytest.mark.asyncio
-@pytest.mark.parametrize("missing_values", [{}, {"key_id": ""}, {"key_id": "待补充"}])
+@pytest.mark.parametrize("missing_values", [{}, {"key_id": ""}])
 async def test_user_supplies_missing_parameter_next_turn(
     tools: list[dict[str, Any]],
     missing_values: dict[str, str],
