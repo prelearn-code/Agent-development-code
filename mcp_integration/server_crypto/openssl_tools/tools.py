@@ -1,15 +1,14 @@
 """OpenSSL MCP tools for server-resolved teaching files."""
 
-import re
 from typing import Any
 
 from mcp.server.mcpserver import MCPServer
 from mcp.types import ToolAnnotations
 from packages.core.config import get_settings
 from packages.crypto.providers import openssl_cli
+from packages.security import resources
 
 _DATA_DIR = get_settings().crypto_data_root
-_OUTPUT_FILES = {"signature.der", "ciphertext.der", "decrypted.bin"}
 
 
 def sha256_file(file_id: str) -> dict[str, Any]:
@@ -19,17 +18,9 @@ def sha256_file(file_id: str) -> dict[str, Any]:
     passed to the model. The result contains the hexadecimal digest.
     """
     try:
-        if re.fullmatch(r"[A-Za-z0-9_-]{1,128}", file_id) is None:
-            raise ValueError("invalid file ID")
-        directory = _DATA_DIR / file_id
-        if directory.is_symlink() or not directory.is_dir():
-            raise ValueError("file directory unavailable")
-        files = [path for path in directory.iterdir() if path.name not in _OUTPUT_FILES]
-        if len(files) != 1 or files[0].is_symlink() or not files[0].is_file():
-            raise ValueError("exactly one original file required")
-        input_file = files[0]
-        if input_file.stat().st_size > openssl_cli.MAX_MESSAGE_BYTES:
-            raise ValueError("message too large")
+        input_file = resources.resolve_message_file(
+            _DATA_DIR, file_id, max_bytes=openssl_cli.MAX_MESSAGE_BYTES
+        )
     except (OSError, ValueError):
         return {
             "ok": False,

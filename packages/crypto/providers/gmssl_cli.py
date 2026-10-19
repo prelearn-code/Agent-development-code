@@ -42,8 +42,8 @@ def sm2_sign_file(
     signer_id: str = "1234567812345678",
 ) -> dict[str, Any]:
     """Sign a server-resolved file with GmSSL -in/-out; never expose key material."""
-    key_files = keystore.find_sm2_key(key_id)
-    if key_files is None:
+    bundle = keystore.find_key(key_id)
+    if bundle is None or bundle.algorithm != "SM2":
         return {"ok": False, "error": "unknown_key", "message": "未配置该密钥标识。"}
     try:
         id_bytes = signer_id.encode("utf-8")
@@ -52,7 +52,7 @@ def sm2_sign_file(
     except (ValueError, UnicodeError):
         return {"ok": False, "error": "invalid_input", "message": "请检查用户标识。"}
 
-    private_key_file, password_file = key_files
+    private_key_file, password_file = bundle.private_key, bundle.password_file
     try:
         if private_key_file.is_symlink() or not private_key_file.is_file():
             return {"ok": False, "error": "key_unavailable", "message": "未配置私钥文件。"}
@@ -208,10 +208,10 @@ def sm2_enc(input_file: Path, out_file: Path, *, public_key: Path) -> dict[str, 
 
 def sm2_dec(input_file: Path, out_file: Path, *, key_id: str) -> dict[str, Any]:
     """Decrypt a server-resolved SM2 DER file without returning plaintext."""
-    key_files = keystore.find_sm2_key(key_id)
-    if key_files is None:
+    bundle = keystore.find_key(key_id)
+    if bundle is None or bundle.algorithm != "SM2":
         return {"ok": False, "error": "unknown_key", "message": "未配置该密钥标识。"}
-    private_key_file, password_file = key_files
+    private_key_file, password_file = bundle.private_key, bundle.password_file
     try:
         if private_key_file.is_symlink() or not private_key_file.is_file():
             return {"ok": False, "error": "key_unavailable", "message": "未配置私钥文件。"}

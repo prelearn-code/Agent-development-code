@@ -117,7 +117,7 @@ def test_sign_then_verify(
 ) -> None:
     monkeypatch.setattr(
         keystore,
-        "SM2_SIGNING_KEYS",
+        "CONFIGURED_KEYS",
         {
             "default": (signed_message["private_key"], signed_message["password"]),
         },
@@ -176,10 +176,10 @@ def test_sign_rejects_linked_key_files(tmp_path: Path, monkeypatch: pytest.Monke
     pass_link = tmp_path / "password-link.txt"
     pass_link.symlink_to(pass_file)
 
-    monkeypatch.setattr(keystore, "SM2_SIGNING_KEYS", {"default": (private_link, pass_file)})
+    monkeypatch.setattr(keystore, "CONFIGURED_KEYS", {"default": (private_link, pass_file)})
     assert sm2_sign_file(tmp_path / "message", tmp_path / "signature")["error"] == "key_unavailable"
 
-    monkeypatch.setattr(keystore, "SM2_SIGNING_KEYS", {"default": (private, pass_link)})
+    monkeypatch.setattr(keystore, "CONFIGURED_KEYS", {"default": (private, pass_link)})
     assert (
         sm2_sign_file(tmp_path / "message", tmp_path / "signature")["error"]
         == "invalid_password_file"
@@ -194,7 +194,7 @@ def test_wrong_key_password(
     (tmp_path / "password.txt").write_text("incorrect-test-password")
     monkeypatch.setattr(
         keystore,
-        "SM2_SIGNING_KEYS",
+        "CONFIGURED_KEYS",
         {
             "default": (signed_message["private_key"], signed_message["password"]),
         },
@@ -222,7 +222,7 @@ def test_generate_and_use_key(tmp_path: Path, monkeypatch: pytest.MonkeyPatch) -
     metadata = json.loads((directory / "metadata.json").read_text())
     assert metadata["key_id"] == first["key_id"]
     # 模拟重启后没有动态内存注册，仍可按服务端 ID 找到保存的密钥。
-    monkeypatch.setattr(keystore, "SM2_SIGNING_KEYS", {})
+    monkeypatch.setattr(keystore, "CONFIGURED_KEYS", {})
     message = tmp_path / "message.bin"
     signature = tmp_path / "signature.der"
     message.write_bytes(b"generated key test")
@@ -238,23 +238,44 @@ def test_generate_and_use_key(tmp_path: Path, monkeypatch: pytest.MonkeyPatch) -
     )
 
 
-def test_flat_key_lookup_checks_algorithm_metadata(
+def test_find_key_reads_metadata(
     tmp_path: Path, monkeypatch: pytest.MonkeyPatch
 ) -> None:
     monkeypatch.setattr(keystore, "_KEY_DIR", tmp_path / "keys")
-    monkeypatch.setattr(keystore, "SM2_SIGNING_KEYS", {})
+    monkeypatch.setattr(keystore, "CONFIGURED_KEYS", {})
     key_id = "sm2_" + "a" * 32
     directory = tmp_path / "keys" / key_id
     directory.mkdir(parents=True)
     metadata_file = directory / "metadata.json"
+
+    # metadata 的 key_id 与入参不一致 → 拒绝
+    metadata_file.write_text(json.dumps({"key_id": "sm2_" + "b" * 32, "algorithm": "SM2"}))
+    assert keystore.find_key(key_id) is None
+
+    # 算法由 metadata 决定：find_key 不写死 SM2
     metadata_file.write_text(json.dumps({"key_id": key_id, "algorithm": "RSA"}))
-    assert keystore.find_sm2_key(key_id) is None
+    bundle = keystore.find_key(key_id)
+    assert bundle is not None
+    assert bundle.algorithm == "RSA"
+    assert bundle.private_key == directory / "private.pem"
+    assert bundle.public_key == directory / "public.pem"
+    assert bundle.password_file == directory / "password.txt"
 
     metadata_file.write_text(json.dumps({"key_id": key_id, "algorithm": "SM2"}))
-    assert keystore.find_sm2_key(key_id) == (
-        directory / "private.pem",
-        directory / "password.txt",
-    )
+    bundle = keystore.find_key(key_id)
+    assert bundle is not None and bundle.algorithm == "SM2"
+
+
+def test_sm2_tools_reject_non_sm2_key(
+    tmp_path: Path, monkeypatch: pytest.MonkeyPatch
+) -> None:
+    monkeypatch.setattr(keystore, "_KEY_DIR", tmp_path / "keys")
+    monkeypatch.setattr(keystore, "CONFIGURED_KEYS", {})
+    key_id = "sm2_" + "c" * 32
+    directory = tmp_path / "keys" / key_id
+    directory.mkdir(parents=True)
+    (directory / "metadata.json").write_text(json.dumps({"key_id": key_id, "algorithm": "RSA"}))
+    assert sm_tools.sm2_sign_message("file_001", key_id)["error"] == "unknown_key"
 
 
 def test_generate_missing_backend_cleans_up(
@@ -268,10 +289,21 @@ def test_generate_missing_backend_cleans_up(
 
 
 @pytest.mark.asyncio
-async def test_sm2_over_stdio(signed_message: dict[str, Path], tmp_path: Path) -> None:
+async def test_sm2_over_stdio(
+    tmp_path: Path, monkeypatch: pytest.MonkeyPatch
+) -> None:
+    """02–04 段 MCP 列表只有只读工具；验签通过真实 stdio 调用验证。"""
+    monkeypatch.setattr(keystore, "_KEY_DIR", tmp_path / "keys")
+    monkeypatch.setattr(sm_tools, "_DATA_DIR", tmp_path / "data")
+    key = sm2_generate_key()
+    assert key["ok"] is True
     data_dir = tmp_path / "data" / "file_001"
     data_dir.mkdir(parents=True)
-    (data_dir / "message.bin").write_bytes(signed_message["message"].read_bytes())
+    (data_dir / "message.bin").write_bytes(b"SM2 read-only stdio\n")
+    arguments = {"file_id": "file_001", "key_id": key["key_id"]}
+    # 写操作已不在 tools/list 中，签名直接调函数完成；stdio 只测只读工具。
+    assert sm_tools.sm2_sign_message(**arguments)["ok"] is True
+
     bootstrap = (
         "from pathlib import Path; from packages.crypto import keystore; "
         "from mcp_integration.server_crypto.gmssl_tools import sm_tools; "
@@ -289,41 +321,18 @@ async def test_sm2_over_stdio(signed_message: dict[str, Path], tmp_path: Path) -
         async with stdio_client(parameters) as (read, write), ClientSession(read, write) as session:
             await session.initialize()
             tools = await session.list_tools()
-            assert {
+            assert {tool.name for tool in tools.tools} == {
+                "sha256_file",
                 "sm2_verify_signature",
-                "sm2_sign_message",
-                "sm2_generate_key",
-                "sm2_enc",
-                "sm2_dec",
-            } <= {tool.name for tool in tools.tools}
-            for tool in tools.tools:
-                if tool.name in {"sm2_sign_message", "sm2_verify_signature", "sm2_enc", "sm2_dec"}:
-                    assert set(tool.input_schema["required"]) == {"file_id", "key_id"}
-                    assert set(tool.input_schema["properties"]) == {"file_id", "key_id"}
-            generated = await session.call_tool("sm2_generate_key", {})
-            assert not generated.is_error and generated.structured_content is not None
-            key = generated.structured_content
-            assert key["ok"] is True
-            assert (tmp_path / "keys" / key["key_id"] / "private.pem").is_file()
-            arguments = {"file_id": "file_001", "key_id": key["key_id"]}
-            signed = await session.call_tool("sm2_sign_message", arguments)
-            assert not signed.is_error and signed.structured_content is not None
-            assert signed.structured_content["ok"] is True
-            assert (data_dir / "signature.der").is_file()
+            }
+            verify_tool = next(
+                tool for tool in tools.tools if tool.name == "sm2_verify_signature"
+            )
+            assert set(verify_tool.input_schema["required"]) == {"file_id", "key_id"}
+            assert set(verify_tool.input_schema["properties"]) == {"file_id", "key_id"}
             verified = await session.call_tool("sm2_verify_signature", arguments)
             assert verified.structured_content is not None
             assert verified.structured_content["valid"] is True
-            encrypted = await session.call_tool("sm2_enc", arguments)
-            assert not encrypted.is_error and encrypted.structured_content is not None
-            assert encrypted.structured_content["ciphertext_file"] == "ciphertext.der"
-            assert (data_dir / "ciphertext.der").is_file()
-            decrypted = await session.call_tool("sm2_dec", arguments)
-            assert not decrypted.is_error and decrypted.structured_content is not None
-            assert decrypted.structured_content["plaintext_file"] == "decrypted.bin"
-            assert "plaintext" not in decrypted.structured_content
-            assert (data_dir / "decrypted.bin").read_bytes() == signed_message[
-                "message"
-            ].read_bytes()
 
 
 def test_file_sign_verify_and_openssl(tmp_path: Path, monkeypatch: pytest.MonkeyPatch) -> None:
@@ -365,7 +374,7 @@ def test_file_sign_verify_and_openssl(tmp_path: Path, monkeypatch: pytest.Monkey
         timeout=10,
     )
     # 模拟重启：移除内存配置，仍可按 ID 从指定目录读取。
-    monkeypatch.setattr(keystore, "SM2_SIGNING_KEYS", {})
+    monkeypatch.setattr(keystore, "CONFIGURED_KEYS", {})
     assert sm_tools.sm2_verify_signature(**arguments)["valid"] is True
     original.write_bytes(b"changed")
     assert not sm_tools.sm2_verify_signature(**arguments).get("valid", False)
@@ -399,7 +408,7 @@ def test_sm2_encrypt_file_roundtrip(
     monkeypatch.setattr(sm_tools, "_DATA_DIR", tmp_path / "data")
     monkeypatch.setattr(
         keystore,
-        "SM2_SIGNING_KEYS",
+        "CONFIGURED_KEYS",
         {"default": (signed_message["private_key"], signed_message["password"])},
     )
     directory = tmp_path / "data" / "file_001"
@@ -454,7 +463,7 @@ def test_sm2_encrypt_rejects_large_input_and_preserves_old_ciphertext(
     monkeypatch.setattr(sm_tools, "_DATA_DIR", tmp_path / "data")
     monkeypatch.setattr(
         keystore,
-        "SM2_SIGNING_KEYS",
+        "CONFIGURED_KEYS",
         {"default": (signed_message["private_key"], signed_message["password"])},
     )
     directory = tmp_path / "data" / "file_001"
@@ -480,7 +489,7 @@ def test_sm2_decrypt_failure_preserves_existing_plaintext(
     monkeypatch.setattr(sm_tools, "_DATA_DIR", tmp_path / "data")
     monkeypatch.setattr(
         keystore,
-        "SM2_SIGNING_KEYS",
+        "CONFIGURED_KEYS",
         {"default": (signed_message["private_key"], signed_message["password"])},
     )
     directory = tmp_path / "data" / "file_001"

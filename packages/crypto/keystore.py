@@ -5,6 +5,7 @@ import re
 import secrets
 import subprocess
 import tempfile
+from dataclasses import dataclass
 from datetime import UTC, datetime
 from pathlib import Path
 from typing import Any
@@ -13,9 +14,25 @@ from uuid import uuid4
 from packages.core.config import get_settings
 
 _KEY_DIR = get_settings().crypto_key_root
-SM2_SIGNING_KEYS: dict[str, tuple[Path, Path]] = {
+_KEY_ID_PATTERN = re.compile(r"[a-z][a-z0-9]{1,7}_[0-9a-f]{32}")
+
+# 受信任的外部密钥（教学环境的 "default" 等）；值为 (私钥, 口令) 路径。
+CONFIGURED_KEYS: dict[str, tuple[Path, Path]] = {
     "default": (_KEY_DIR / "default" / "private.pem", _KEY_DIR / "default" / "password.txt"),
 }
+
+
+@dataclass(frozen=True)
+class KeyBundle:
+    """一个密钥目录的完整视图；文件是否存在由调用方判断（不在这里隐式过滤）。"""
+
+    key_id: str
+    algorithm: str
+    purpose: str
+    directory: Path
+    private_key: Path  # 私钥；对称密钥时放密钥材料
+    public_key: Path  # 仅非对称有意义，可能不存在
+    password_file: Path
 
 
 def generate_sm2_key() -> dict[str, Any]:
@@ -86,14 +103,29 @@ def generate_sm2_key() -> dict[str, Any]:
     return {"ok": True, **metadata, "public_key_pem": public_pem}
 
 
-def find_sm2_key(key_id: str) -> tuple[Path, Path] | None:
+def find_key(key_id: str) -> KeyBundle | None:
+    """按 key_id 找到 `keys/<key_id>/`，与算法无关。
+
+    只校验 ID 形状、目录/metadata 完整性；**不检查私钥/口令文件是否存在**，
+    否则"目录和 metadata 都对、但私钥丢了"会从 `key_unavailable` 变成
+    `unknown_key`，改变错误语义。
+    """
     if _KEY_DIR.is_symlink():
         return None
-    configured = SM2_SIGNING_KEYS.get(key_id)
+    configured = CONFIGURED_KEYS.get(key_id)
     if configured is not None:
-        return configured
+        private_key, password_file = configured
+        return KeyBundle(
+            key_id=key_id,
+            algorithm="SM2",
+            purpose="configured",
+            directory=private_key.parent,
+            private_key=private_key,
+            public_key=private_key.with_name("public.pem"),
+            password_file=password_file,
+        )
     # 仅解析服务端生成的标识；重启后无需依赖内存中的注册表。
-    if re.fullmatch(r"sm2_[0-9a-f]{32}", key_id) is None:
+    if _KEY_ID_PATTERN.fullmatch(key_id) is None:
         return None
     directory = _KEY_DIR / key_id
     metadata_file = directory / "metadata.json"
@@ -107,10 +139,20 @@ def find_sm2_key(key_id: str) -> tuple[Path, Path] | None:
         metadata = json.loads(metadata_bytes)
     except (OSError, UnicodeError, ValueError):
         return None
+    algorithm = metadata.get("algorithm") if isinstance(metadata, dict) else None
     if (
         not isinstance(metadata, dict)
         or metadata.get("key_id") != key_id
-        or metadata.get("algorithm") != "SM2"
+        or not isinstance(algorithm, str)
+        or not algorithm
     ):
         return None
-    return directory / "private.pem", directory / "password.txt"
+    return KeyBundle(
+        key_id=key_id,
+        algorithm=algorithm,
+        purpose=str(metadata.get("purpose", "")),
+        directory=directory,
+        private_key=directory / "private.pem",
+        public_key=directory / "public.pem",
+        password_file=directory / "password.txt",
+    )

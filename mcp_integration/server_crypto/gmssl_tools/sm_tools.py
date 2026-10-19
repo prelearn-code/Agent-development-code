@@ -1,7 +1,6 @@
 """Existing SM2 file tools and their registration on a shared Crypto MCP server."""
 
 import os
-import re
 import tempfile
 from pathlib import Path
 from typing import Any
@@ -11,11 +10,11 @@ from mcp.types import ToolAnnotations
 from packages.core.config import get_settings
 from packages.crypto import keystore
 from packages.crypto.providers import gmssl_cli
+from packages.security import resources
 
 _DATA_DIR = get_settings().crypto_data_root
 MAX_MESSAGE_BYTES = gmssl_cli.MAX_MESSAGE_BYTES
 SM2_ENCRYPT_MAX_BYTES = 255
-_OUTPUT_FILES = {"signature.der", "ciphertext.der", "decrypted.bin"}
 
 
 def sm2_generate_key() -> dict[str, Any]:
@@ -24,21 +23,19 @@ def sm2_generate_key() -> dict[str, Any]:
 
 
 def _file_directory(file_id: str) -> Path:
-    if re.fullmatch(r"[A-Za-z0-9_-]{1,128}", file_id) is None:
-        raise ValueError("invalid file ID")
-    directory = _DATA_DIR / file_id
-    if directory.is_symlink() or not directory.is_dir():
-        raise ValueError("file directory unavailable")
-    return directory
+    return resources.resolve_file_dir(_DATA_DIR, file_id)
 
 
 def _message_file(directory: Path, *, max_bytes: int = MAX_MESSAGE_BYTES) -> Path:
-    files = [path for path in directory.iterdir() if path.name not in _OUTPUT_FILES]
-    if len(files) != 1 or files[0].is_symlink() or not files[0].is_file():
-        raise ValueError("exactly one input file required")
-    if files[0].stat().st_size > max_bytes:
-        raise ValueError("message too large")
-    return files[0]
+    return resources.pick_message_file(directory, max_bytes=max_bytes)
+
+
+def _sm2_key(key_id: str) -> keystore.KeyBundle | None:
+    """SM2 工具只接受 algorithm == "SM2" 的密钥；其他算法在这里被拒。"""
+    bundle = resources.resolve_key(key_id)
+    if bundle is None or bundle.algorithm != "SM2":
+        return None
+    return bundle
 
 
 def sm2_sign_message(file_id: str, key_id: str) -> dict[str, Any]:
@@ -49,7 +46,7 @@ def sm2_sign_message(file_id: str, key_id: str) -> dict[str, Any]:
     签名保存为同一文件夹内的 signature.der；再次签名覆盖该结果，不应自动重试。
     无需提供文件路径、Base64、私钥、口令或 signer_id。
     """
-    if keystore.find_sm2_key(key_id) is None:
+    if _sm2_key(key_id) is None:
         return {"ok": False, "error": "unknown_key", "message": "未找到对应 key_id 的密钥。"}
     try:
         directory = _file_directory(file_id)
@@ -85,14 +82,14 @@ def sm2_verify_signature(file_id: str, key_id: str) -> dict[str, Any]:
     输入 ID 必须与签名时一致。无需提供公钥、Base64 或签名结果。
     ok 表示是否完成验签，valid 表示签名是否有效。
     """
-    key_files = keystore.find_sm2_key(key_id)
-    if key_files is None:
+    bundle = _sm2_key(key_id)
+    if bundle is None:
         return {"ok": False, "error": "unknown_key", "message": "未找到对应 key_id 的密钥。"}
     try:
         directory = _file_directory(file_id)
         message_file = _message_file(directory)
         signature_file = directory / "signature.der"
-        public_key_file = key_files[0].with_name("public.pem")
+        public_key_file = bundle.public_key
         if signature_file.is_symlink() or public_key_file.is_symlink():
             raise ValueError("linked signature or public key")
         if not 8 <= signature_file.stat().st_size <= 72:
@@ -121,14 +118,14 @@ def sm2_enc(file_id: str, key_id: str) -> dict[str, Any]:
     Resolve both IDs on the server; publish the binary DER result as ciphertext.der
     only after GmSSL succeeds. Repeated calls replace the previous ciphertext.
     """
-    key_files = keystore.find_sm2_key(key_id)
-    if key_files is None:
+    bundle = _sm2_key(key_id)
+    if bundle is None:
         return {"ok": False, "error": "unknown_key", "message": "未找到对应 key_id 的密钥。"}
 
     try:
         directory = _file_directory(file_id)
         message_file = _message_file(directory, max_bytes=SM2_ENCRYPT_MAX_BYTES)
-        public_key_file = key_files[0].with_name("public.pem")
+        public_key_file = bundle.public_key
         if public_key_file.is_symlink():
             raise ValueError("linked public key")
         with public_key_file.open("r", encoding="ascii") as stream:
@@ -167,7 +164,7 @@ def sm2_dec(file_id: str, key_id: str) -> dict[str, Any]:
     The plaintext stays on the server as decrypted.bin and is never returned
     through MCP. A failed attempt does not replace an earlier result.
     """
-    if keystore.find_sm2_key(key_id) is None:
+    if _sm2_key(key_id) is None:
         return {"ok": False, "error": "unknown_key", "message": "未找到对应 key_id 的密钥。"}
     try:
         directory = _file_directory(file_id)
@@ -203,12 +200,11 @@ def sm2_dec(file_id: str, key_id: str) -> dict[str, Any]:
 
 
 def register_tools(mcp: MCPServer) -> None:
-    """Publish all existing SM2 tools on the one server instance."""
-    writable = ToolAnnotations(read_only_hint=False, destructive_hint=False, idempotent_hint=False)
-    mcp.tool(annotations=writable)(sm2_generate_key)
-    mcp.tool(annotations=writable)(sm2_sign_message)
-    mcp.tool(annotations=writable)(sm2_enc)
-    mcp.tool(annotations=writable)(sm2_dec)
+    """02–04 段只暴露只读工具；写操作 06 段再开。
+
+    写工具的函数与单元测试保留，只是不出现在 tools/list 里——模型看不见就
+    不会去猜。恢复注册时连同风险策略一起在 06 段处理。
+    """
     mcp.tool(annotations=ToolAnnotations(read_only_hint=True, destructive_hint=False))(
         sm2_verify_signature
     )
