@@ -330,6 +330,9 @@ async def test_sm2_over_stdio(
             )
             assert set(verify_tool.input_schema["required"]) == {"file_id", "key_id"}
             assert set(verify_tool.input_schema["properties"]) == {"file_id", "key_id"}
+            properties = verify_tool.input_schema["properties"]
+            assert properties["file_id"]["x-resource"] == "file"
+            assert properties["key_id"]["x-resource"] == "key"
             verified = await session.call_tool("sm2_verify_signature", arguments)
             assert verified.structured_content is not None
             assert verified.structured_content["valid"] is True

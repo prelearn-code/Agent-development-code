@@ -5,13 +5,14 @@ from typing import Any
 from mcp.server.mcpserver import MCPServer
 from mcp.types import ToolAnnotations
 from packages.core.config import get_settings
+from packages.core.resource_schema import FileId
 from packages.crypto.providers import openssl_cli
 from packages.security import resources
 
 _DATA_DIR = get_settings().crypto_data_root
 
 
-def sha256_file(file_id: str) -> dict[str, Any]:
+def sha256_file(file_id: FileId) -> dict[str, Any]:
     """Calculate SHA-256 for the sole original file in data/<file_id> by default.
 
     Only a server-side file ID is accepted; file contents and paths are not

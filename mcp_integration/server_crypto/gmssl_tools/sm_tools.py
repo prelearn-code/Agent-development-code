@@ -8,6 +8,7 @@ from typing import Any
 from mcp.server.mcpserver import MCPServer
 from mcp.types import ToolAnnotations
 from packages.core.config import get_settings
+from packages.core.resource_schema import FileId, KeyId
 from packages.crypto import keystore
 from packages.crypto.providers import gmssl_cli
 from packages.security import resources
@@ -38,7 +39,7 @@ def _sm2_key(key_id: str) -> keystore.KeyBundle | None:
     return bundle
 
 
-def sm2_sign_message(file_id: str, key_id: str) -> dict[str, Any]:
+def sm2_sign_message(file_id: FileId, key_id: KeyId) -> dict[str, Any]:
     """按 file_id、key_id 对对应文件进行 SM2/SM3 签名。
 
     密钥位于 keys/<key_id>，文件默认位于 data/<file_id>。
@@ -75,7 +76,7 @@ def sm2_sign_message(file_id: str, key_id: str) -> dict[str, Any]:
     return {"ok": True, "file_id": file_id, "key_id": key_id, "signature_file": "signature.der"}
 
 
-def sm2_verify_signature(file_id: str, key_id: str) -> dict[str, Any]:
+def sm2_verify_signature(file_id: FileId, key_id: KeyId) -> dict[str, Any]:
     """按 file_id、key_id 验证对应文件夹内的 SM2/SM3 签名。
 
     使用 keys/<key_id>/public.pem，以及默认 data/<file_id> 内的原文件和 signature.der。
@@ -112,7 +113,7 @@ def sm2_verify_signature(file_id: str, key_id: str) -> dict[str, Any]:
     return {**result, "file_id": file_id, "key_id": key_id}
 
 
-def sm2_enc(file_id: str, key_id: str) -> dict[str, Any]:
+def sm2_enc(file_id: FileId, key_id: KeyId) -> dict[str, Any]:
     """Encrypt a file of at most 255 bytes with an SM2 public key.
 
     Resolve both IDs on the server; publish the binary DER result as ciphertext.der
@@ -158,7 +159,7 @@ def sm2_enc(file_id: str, key_id: str) -> dict[str, Any]:
     return {"ok": True, "file_id": file_id, "key_id": key_id, "ciphertext_file": "ciphertext.der"}
 
 
-def sm2_dec(file_id: str, key_id: str) -> dict[str, Any]:
+def sm2_dec(file_id: FileId, key_id: KeyId) -> dict[str, Any]:
     """Decrypt ciphertext.der with the selected SM2 key into a local file.
 
     The plaintext stays on the server as decrypted.bin and is never returned

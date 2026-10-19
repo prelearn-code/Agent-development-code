@@ -3,6 +3,8 @@
 from typing import Any
 
 from jsonschema import Draft202012Validator  # type: ignore[import-untyped]
+from packages.core.models import RiskLevel, ToolSpec
+from packages.core.resource_schema import RESOURCE_SCHEMA_KEY
 
 
 def validate_tool_arguments(
@@ -72,3 +74,59 @@ def validate_tool_arguments(
             "message": message + "，请用户修正。",
         }
     return None
+
+
+# ---------------------------------------------------------------- 工具规格表
+# 风险等级是本地权威，不信任 MCP server 的 annotation（06 段原则）。
+_RISK: dict[str, RiskLevel] = {
+    "sha256_file": RiskLevel.L0_READ,
+    "sm2_verify_signature": RiskLevel.L0_READ,
+    # 写工具 02–04 段不注册，但规格先定义好，06 段恢复注册时直接用。
+    "sm2_sign_message": RiskLevel.L2_WRITE,
+    "sm2_enc": RiskLevel.L2_WRITE,
+    "sm2_dec": RiskLevel.L2_WRITE,
+    "sm2_generate_key": RiskLevel.L2_WRITE,
+}
+
+_MCP_SERVER = "crypto"
+
+
+def build_toolspecs(tools: list[dict[str, Any]]) -> dict[str, ToolSpec]:
+    """把 MCP 发现的工具与本地风险表合成 ToolSpec。
+
+    schema/description 用发现结果（单一事实源），风险/只读用本地表。
+    未在 _RISK 里声明的工具**不进表**：调用时按 ToolNotFoundError 拒绝（fail closed）。
+    """
+    specs: dict[str, ToolSpec] = {}
+    for tool in tools:
+        function = tool.get("function") or {}
+        name = function.get("name")
+        if not isinstance(name, str):
+            continue
+        risk = _RISK.get(name)
+        if risk is None:
+            continue
+        specs[name] = ToolSpec(
+            name=name,
+            description=str(function.get("description", "")),
+            input_schema=function.get("parameters", {}),
+            risk_level=risk,
+            read_only=risk == RiskLevel.L0_READ,
+            source="mcp",
+            mcp_server=_MCP_SERVER,
+        )
+    return specs
+
+
+def resource_args(spec: ToolSpec) -> dict[str, str]:
+    """从工具 schema 读资源参数（参数名 → 资源类型）。
+
+    声明位置是 MCP 工具签名（`FileId` / `KeyId`），这里只负责读取；
+    未标 `x-resource` 的参数不当作资源，交给服务端复查。
+    """
+    properties = spec.input_schema.get("properties") or {}
+    return {
+        name: schema[RESOURCE_SCHEMA_KEY]
+        for name, schema in properties.items()
+        if isinstance(schema, dict) and isinstance(schema.get(RESOURCE_SCHEMA_KEY), str)
+    }

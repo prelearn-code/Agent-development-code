@@ -72,6 +72,7 @@ async def test_sha256_file_over_stdio(tmp_path: Path) -> None:
             sha256 = next(tool for tool in tools.tools if tool.name == "sha256_file")
             assert set(sha256.input_schema["required"]) == {"file_id"}
             assert set(sha256.input_schema["properties"]) == {"file_id"}
+            assert sha256.input_schema["properties"]["file_id"]["x-resource"] == "file"
             result = await session.call_tool("sha256_file", {"file_id": "file_001"})
             assert not result.is_error and result.structured_content is not None
             assert result.structured_content["digest_hex"] == hashlib.sha256(content).hexdigest()
