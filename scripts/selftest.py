@@ -4,7 +4,7 @@
 作用：在 uv sync 之前就能验证仓库骨架是否自洽，也可以在 CI 与
 "干净 clone 后"作为第一道门禁。
 
-它同时是本仓库**目录布局的权威定义**：docs/layout.json就是阶段目录契约。
+它同时是本仓库**目录布局的权威定义**：scripts/layout.json就是阶段目录契约。
 
 用法：
     python scripts/selftest.py
@@ -25,9 +25,9 @@ from pathlib import Path
 REPO = Path(__file__).resolve().parent.parent
 
 # ---------------------------------------------------------------- 目录契约
-# 每个条目：路径 -> 负责的里程碑。这就是 docs/STRUCTURE.md 的可执行版本。
+# 每个条目：路径 -> 负责的里程碑。目录职责同时登记在 README.md。
 STAGES = tuple(f"V{i}" for i in range(7))
-LAYOUT_FILE = REPO / "docs/layout.json"
+LAYOUT_FILE = REPO / "scripts/layout.json"
 
 # ---------------------------------------------------------------- 分层契约
 # key 不允许 import value 里的顶层包。
@@ -39,7 +39,6 @@ LAYERING: dict[str, set[str]] = {
         "tools",
         "mcp",
         "mcp_integration",
-        "minimal_agent",
         "packages.app",
         "memory",
         "verifier",
@@ -55,7 +54,6 @@ LAYERING: dict[str, set[str]] = {
         "tools",
         "mcp",
         "mcp_integration",
-        "minimal_agent",
         "packages.app",
         "memory",
         "verifier",
@@ -68,7 +66,6 @@ LAYERING: dict[str, set[str]] = {
         "tools",
         "mcp",
         "mcp_integration",
-        "minimal_agent",
         "packages.app",
         "memory",
         "verifier",
@@ -80,7 +77,6 @@ LAYERING["packages/crypto"] = {
     "packages.llm",
     "services",
     "graph",
-    "minimal_agent",
     "pipelines",
     "mcp_integration",
     "memory",
@@ -95,9 +91,7 @@ REQUIRED_FILES = [
     ".gitignore",
     "README.md",
     "AGENTS.md",
-    "docs/STRUCTURE.md",
-    "docs/CORE-FIRST.md",
-    "docs/layout.json",
+    "scripts/layout.json",
     "packages/app/cli.py",
     "packages/app/__main__.py",
     "scripts/selftest.py",
@@ -145,7 +139,7 @@ def check_layout(stage: str = "V1") -> None:
         entries = manifest["directories"]
         seen: set[str] = set()
         expected: list[str] = []
-        structure = (REPO / "docs/STRUCTURE.md").read_text(encoding="utf-8")
+        structure = (REPO / "README.md").read_text(encoding="utf-8")
         for entry in entries:
             path, introduced = entry["path"], entry["stage"]
             resolved = (REPO / path).resolve()
@@ -153,13 +147,13 @@ def check_layout(stage: str = "V1") -> None:
                 raise ValueError("unsafe or duplicate layout path")
             seen.add(path.casefold())
             if introduced not in STAGES or f"`{path}/`" not in structure:
-                raise ValueError("unknown stage or directory missing from STRUCTURE")
+                raise ValueError("unknown stage or directory missing from README")
             if STAGES.index(introduced) <= STAGES.index(stage):
                 expected.append(path)
         if not expected:
             raise ValueError("empty stage layout")
     except (OSError, ValueError, KeyError, TypeError):
-        fail("目录契约", "无法解析layout或与STRUCTURE不一致")
+        fail("目录契约", "无法解析layout或与README不一致")
         return
 
     missing = [path for path in expected if not (REPO / path).is_dir()]
@@ -356,7 +350,7 @@ def check_ollama_endpoint() -> None:
     这个检查的**方向被反转过一次**：旧方案把 Ollama 留在 Windows 宿主，
     Ubuntu 侧必须用宿主 IP，所以当时检查的是"不得写 localhost"。
     现在 Ollama 是 Ubuntu 内的 systemd 服务，跨网络访问的前提已不存在，
-    写宿主 IP 或 0.0.0.0 才是错的（见指南 01-ENVIRONMENT.md §0、§5）。
+    写宿主 IP 或 0.0.0.0 才是错的（见 README 的运行配置）。
     """
     env = REPO / ".env.example"
     if not env.is_file():

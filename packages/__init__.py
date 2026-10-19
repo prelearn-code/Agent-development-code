@@ -1,6 +1,6 @@
 """Agent-development-code —— 顶层包。
 
-分层规则（见 docs/STRUCTURE.md）：
+分层规则（见 README.md）：
     packages.core   -> 无 IO，纯逻辑
     packages.llm    -> 只依赖 core
     packages.db     -> 只依赖 core

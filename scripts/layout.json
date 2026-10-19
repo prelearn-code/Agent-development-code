@@ -32,14 +32,9 @@
       "purpose": "入口与合同测试"
     },
     {
-      "path": "docs/decisions",
-      "stage": "V0",
-      "purpose": "本人决策记录"
-    },
-    {
       "path": "packages/llm",
       "stage": "V1",
-      "purpose": "Ollama原生客户端与NDJSON，待实现"
+      "purpose": "已有Ollama非流式请求；NDJSON待实现"
     },
     {
       "path": "packages/security",
@@ -49,27 +44,17 @@
     {
       "path": "packages/crypto/providers",
       "stage": "V1",
-      "purpose": "固定OpenSSL/GmSSL适配，待实现"
+      "purpose": "已有GmSSL SM2固定调用；OpenSSL待实现"
     },
     {
       "path": "tools/builtin",
       "stage": "V1",
-      "purpose": "先inspect_certificate和digest_file，待实现"
+      "purpose": "按需使用的本地工具，当前占位"
     },
     {
       "path": "tools/tests",
       "stage": "V1",
       "purpose": "工具正常/失败/边界验证，待实现"
-    },
-    {
-      "path": "minimal_agent",
-      "stage": "V1",
-      "purpose": "本人手写runner.py与Loop，待实现"
-    },
-    {
-      "path": "minimal_agent/traces",
-      "stage": "V1",
-      "purpose": "脱敏原始消息与调用证据"
     },
     {
       "path": "packages/db",
@@ -104,7 +89,7 @@
     {
       "path": "mcp_integration/client",
       "stage": "V3",
-      "purpose": "MCP桥接，待实现"
+      "purpose": "已有stdio连接与工具发现；更广泛桥接待实现"
     },
     {
       "path": "mcp_integration/common",
@@ -114,7 +99,7 @@
     {
       "path": "mcp_integration/server_crypto",
       "stage": "V3",
-      "purpose": "先一个Crypto Server复用业务服务"
+      "purpose": "已有SM2 Crypto Server，后续扩展其他能力"
     },
     {
       "path": "graph/nodes",
@@ -170,6 +155,36 @@
       "path": "services/agent_worker",
       "stage": "V6",
       "purpose": "需要独立worker时实现，否则注明不适用"
+    },
+    {
+      "path": "packages/db/migrations",
+      "stage": "V2",
+      "purpose": "应用数据库 schema 迁移"
+    },
+    {
+      "path": "infra/dockerfiles",
+      "stage": "V2",
+      "purpose": "运行镜像构建"
+    },
+    {
+      "path": "infra/init",
+      "stage": "V2",
+      "purpose": "服务首次初始化"
+    },
+    {
+      "path": "mcp_integration/server_crypto/gmssl_tools",
+      "stage": "V3",
+      "purpose": "已有SM2 MCP工具包装与注册"
+    },
+    {
+      "path": "mcp_integration/server_crypto/openssl_tools",
+      "stage": "V3",
+      "purpose": "OpenSSL MCP 工具包装与注册"
+    },
+    {
+      "path": "reports",
+      "stage": "V6",
+      "purpose": "评测报告与图表"
     }
   ]
 }

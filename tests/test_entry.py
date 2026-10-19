@@ -39,7 +39,7 @@ class EntryTests(unittest.TestCase):
 
     def test_missing_learner_package_is_reported_as_missing_entry(self) -> None:
         with patch.object(
-            cli, "_load_runner", side_effect=ModuleNotFoundError(name="minimal_agent")
+            cli, "_load_runner", side_effect=ModuleNotFoundError(name="packages.app.agent")
         ):
             code, result = self.invoke(["run", "--question", "检查教学证书"])
         self.assertEqual(code, 2)

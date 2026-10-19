@@ -12,7 +12,7 @@ from pathlib import Path
 from typing import Any, cast
 
 REPO = Path(__file__).resolve().parents[2]
-LEARNER_MODULE = "minimal_agent.runner"
+LEARNER_MODULE = "packages.app.agent"
 Runner = Callable[..., Coroutine[Any, Any, dict[str, object]]]
 
 
@@ -21,11 +21,11 @@ def status(repo: Path = REPO) -> dict[str, object]:
     return {
         "entry": "python -m packages.app",
         "entry_ready": True,
-        "learner_entry_present": (repo / "minimal_agent/runner.py").is_file(),
-        "learner_entry": "minimal_agent.runner.run",
+        "learner_entry_present": (repo / "packages/app/agent.py").is_file(),
+        "learner_entry": "packages.app.agent.run",
         "business_verified": False,
         "network_requests": 0,
-        "next_steps": "docs/CORE-FIRST.md",
+        "next_steps": "README.md",
     }
 
 
@@ -42,10 +42,10 @@ def _emit(value: dict[str, object]) -> None:
 
 
 def main(argv: Sequence[str] | None = None) -> int:
-    parser = argparse.ArgumentParser(description="密码工具 Agent 的薄启动入口")
+    parser = argparse.ArgumentParser(description="密码工具 Agent 的启动入口")
     commands = parser.add_subparsers(dest="command", required=True)
     commands.add_parser("status", help="检查入口与学习者文件状态；不调用模型或密码工具")
-    run_parser = commands.add_parser("run", help="调用学习者本人实现的 minimal_agent.runner.run")
+    run_parser = commands.add_parser("run", help="调用已迁移的 packages.app.agent.run")
     run_parser.add_argument("--question", required=True, help="输入需求，权限由实际执行器校验")
     args = parser.parse_args(argv)
 
@@ -59,8 +59,8 @@ def main(argv: Sequence[str] | None = None) -> int:
     try:
         runner = _load_runner()
     except ModuleNotFoundError as exc:
-        if exc.name in {LEARNER_MODULE, "minimal_agent"}:
-            _emit({"error": "learner_entry_missing", "next_steps": "docs/CORE-FIRST.md"})
+        if exc.name in {LEARNER_MODULE, "packages.app.agent"}:
+            _emit({"error": "learner_entry_missing", "next_steps": "README.md"})
             return 2
         _emit({"error": "learner_dependency_missing"})
         return 3

@@ -1,7 +1,7 @@
 """核心契约：ToolResult / ToolSpec / RiskLevel / Policy / Citation。
 
 这些类型是 M1 起的稳定接口，M2~M6 的审批、MCP、Verifier 都建立在其上。
-改动需同步 repo-structure.md 并升版本。
+合同改动需同步调用方与测试，并按兼容性要求管理版本。
 
 设计要点（来自 2026-10-10 修订）：
   - ToolResult 统一为 Pydantic BaseModel 泛型，序列化用 model_dump_json()。

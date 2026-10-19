@@ -4,17 +4,22 @@ version = "0.0.1"
 description = "密码工具 Agent - 逐步交付的学习骨架"
 requires-python = ">=3.12"
 # 依赖组名保留兼容，执行顺序按V0-V6；不要一次装全。
-#   M1: pydantic / httpx / pydantic-settings
+#   M1: pydantic / httpx（pydantic-settings 为基础配置依赖）
 #   M2: fastapi / uvicorn / sqlalchemy / asyncpg / alembic
 #   M3: qdrant-client / pymupdf / rank-bm25 / jieba
 #   M4: mcp / langgraph / langgraph-checkpoint-postgres
-dependencies = []
+dependencies = [
+    "jsonschema>=4.20.0",
+    "mcp>=2.3.0",
+    "numpy>=1.26.2",
+    "pydantic-settings>=2.6",
+]
 
 [project.scripts]
 crypto-agent = "packages.app.cli:main"
 
 [project.optional-dependencies]
-m1 = ["pydantic>=2.9", "httpx>=0.27", "pydantic-settings>=2.6"]
+m1 = ["pydantic>=2.9", "httpx>=0.27"]
 m2 = ["fastapi>=0.115", "uvicorn[standard]>=0.32", "sqlalchemy[asyncio]>=2.0.36",
       "asyncpg>=0.30", "alembic>=1.14"]
 m3 = ["qdrant-client>=1.12", "pymupdf>=1.24", "rank-bm25>=0.2.2", "jieba>=0.42.1"]
@@ -30,7 +35,7 @@ requires = ["hatchling"]
 build-backend = "hatchling.build"
 
 [tool.hatch.build.targets.wheel]
-packages = ["packages", "tools", "minimal_agent"]
+packages = ["packages", "tools", "mcp_integration"]
 
 [tool.pytest.ini_options]
 asyncio_mode = "auto"
@@ -40,7 +45,7 @@ addopts = "-q"
 [tool.ruff]
 target-version = "py312"
 line-length = 100
-src = ["packages", "tools", "services", "minimal_agent", "pipelines", "graph", "memory", "verifier", "mcp_integration"]
+src = ["packages", "tools", "services", "pipelines", "graph", "memory", "verifier", "mcp_integration"]
 
 [tool.ruff.lint]
 select = ["E", "F", "I", "UP", "B", "SIM", "TID"]

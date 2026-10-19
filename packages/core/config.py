@@ -16,10 +16,19 @@ from typing import Literal
 from pydantic import Field, field_validator
 from pydantic_settings import BaseSettings, SettingsConfigDict
 
+REPO_ROOT = Path(__file__).resolve().parents[2]
+
+
+def _project_path(value: str) -> Path:
+    """Resolve configured relative paths from the code repository, not the launch directory."""
+    path = Path(value)
+    # Keep the final component unresolved so callers can detect a symlinked key root.
+    return path if path.is_absolute() else REPO_ROOT / path
+
 
 class Settings(BaseSettings):
     model_config = SettingsConfigDict(
-        env_file=".env",
+        env_file=REPO_ROOT / ".env",
         env_file_encoding="utf-8",
         extra="ignore",
         case_sensitive=False,
@@ -33,7 +42,7 @@ class Settings(BaseSettings):
     # ---- LLM / Ollama ----
     # Ollama 是 Ubuntu 内的 systemd 服务（与本应用同机），走回环即可。
     # 不要改成 0.0.0.0 或宿主 IP：容器需要访问时用 network_mode: host，
-    # 见指南 01-ENVIRONMENT.md §5.1。
+    # 地址与运行方式见 README.md。
     OLLAMA_BASE_URL: str = "http://127.0.0.1:11434"
     # Controller 计划模型：qwen3.5:4b（qwen35 家族，Q4_K_M，256K ctx，原生 tools/thinking）。
     # 要求 Ollama >= 0.30.0；出厂采样参数与实验配置分开记录。
@@ -41,7 +50,7 @@ class Settings(BaseSettings):
     CONTROLLER_MODEL_SMALL: str = "qwen3.5:4b"
     CONTROLLER_MODEL_LARGE: str = ""  # M5 才需要
     JUDGE_MODEL: str = ""  # M5 才需要，必须与生成模型不同
-    LLM_TIMEOUT_S: int = 120
+    LLM_TIMEOUT_S: int = Field(default=120, gt=0)
     LLM_THINK: bool = False  # 固定 false，否则 token 消耗无法跨配置比较
     LLM_NUM_CTX: int = 8192
 
@@ -71,6 +80,14 @@ class Settings(BaseSettings):
     MCP_LOG_DIR: str = "./data/mcp-logs"
     MCP_FS_ROOT: str = "./data"
 
+    # ---- 本地密码工具 ----
+    CRYPTO_KEY_ROOT: str = "keys"
+    CRYPTO_DATA_ROOT: str = "data"
+    GMSSL_BIN: str = "../.local/gmssl/bin/gmssl"
+    OPENSSL_BIN: str = "/bin/openssl"
+    CRYPTO_MAX_FILE_BYTES: int = Field(default=100 * 1024 * 1024, gt=0)
+    CRYPTO_TIMEOUT_S: int = Field(default=10, gt=0)
+
     # ---- 评测 ----
     # 串行是刻意的：单 GPU 下并发只会互相排队，让延迟指标不可比。
     EVAL_CONCURRENCY: int = 1
@@ -79,16 +96,35 @@ class Settings(BaseSettings):
     # ---- 派生属性 ----
     @property
     def allowed_read_roots(self) -> list[Path]:
-        return [
-            Path(p.strip()).resolve()
-            for p in self.ALLOWED_READ_ROOTS.split(",")
-            if p.strip()
-        ]
+        return [Path(p.strip()).resolve() for p in self.ALLOWED_READ_ROOTS.split(",") if p.strip()]
 
     @property
     def judge_model_or_default(self) -> str:
         """Judge 必须与生成模型不同；未配置时回退到 LARGE。"""
         return self.JUDGE_MODEL or self.CONTROLLER_MODEL_LARGE
+
+    @property
+    def crypto_key_root(self) -> Path:
+        return _project_path(self.CRYPTO_KEY_ROOT)
+
+    @property
+    def crypto_data_root(self) -> Path:
+        return _project_path(self.CRYPTO_DATA_ROOT)
+
+    @property
+    def gmssl_bin(self) -> Path:
+        return _project_path(self.GMSSL_BIN)
+
+    @property
+    def openssl_bin(self) -> Path:
+        return _project_path(self.OPENSSL_BIN)
+
+    @field_validator("CRYPTO_KEY_ROOT", "CRYPTO_DATA_ROOT", "GMSSL_BIN", "OPENSSL_BIN")
+    @classmethod
+    def _check_crypto_path(cls, v: str) -> str:
+        if not v.strip():
+            raise ValueError("密码工具路径不能为空")
+        return v
 
     @field_validator("OLLAMA_BASE_URL", "QDRANT_URL")
     @classmethod

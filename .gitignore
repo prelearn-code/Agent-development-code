@@ -27,6 +27,7 @@ coverage.xml
 
 # ---- 数据与产物（体积大或含隐私，不进 git）----
 data/
+keys/
 eval/results/
 reports/*.png
 reports/*.pdf
