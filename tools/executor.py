@@ -10,10 +10,15 @@ import time
 from typing import Any
 
 from mcp import ClientSession
+from packages.core.config import get_settings
+from packages.core.errors import ToolPermissionError
 from packages.core.logging import scrub
-from packages.core.models import ToolResult
+from packages.core.models import ToolResult, ToolSpec
+from packages.core.resource_schema import ResourceKind
+from packages.security import resources as security
+from packages.security.policy import check_policy
 
-from tools.registry import validate_tool_arguments
+from tools.registry import build_toolspecs, resource_args, validate_tool_arguments
 
 # schema 校验返回的业务错误码 → 契约异常类型
 _ERROR_TYPES = {
@@ -49,14 +54,34 @@ def _fail(
     )
 
 
+def _resolve_resource(kind: str, value: Any) -> None:
+    """按 schema 里的 `x-resource` 在调 MCP 之前做资源边界检查。"""
+    if not isinstance(value, str):
+        raise ToolPermissionError("资源 ID 必须是字符串。", resource=kind)
+    if kind == ResourceKind.FILE:
+        settings = get_settings()
+        security.require_message_file(
+            value,
+            max_bytes=settings.CRYPTO_MAX_FILE_BYTES,
+            root=settings.crypto_data_root,
+        )
+    elif kind == ResourceKind.KEY:
+        security.require_key(value)
+    else:
+        raise ToolPermissionError("未知资源类型。", resource=kind)
+
+
 async def execute_tool(
     session: ClientSession,
     name: str,
     arguments: Any,
     tools: list[dict[str, Any]],
+    *,
+    specs: dict[str, ToolSpec] | None = None,
 ) -> ToolResult[Any]:
-    """先校验参数，再执行 MCP 工具。
+    """先校验参数、登记、资源与风险，再执行 MCP 工具。
 
+    顺序固定：schema → 登记 → 资源 → 策略 → call_tool。
     - 预期失败转成 success=False，不抛异常
     - 意外异常在这一层分类；CancelledError 必须继续传播
     - metadata["wire"] 保存模型可见的原始 dict（成功=工具结果，失败={ok:false,...}）
@@ -65,6 +90,9 @@ async def execute_tool(
 
     def elapsed_ms() -> float:
         return (time.monotonic() - started) * 1000
+
+    if specs is None:
+        specs = build_toolspecs(tools)
 
     if isinstance(arguments, str):
         try:
@@ -97,6 +125,37 @@ async def execute_tool(
             tool_name=name,
             duration_ms=elapsed_ms(),
             **context,
+        )
+
+    spec = specs.get(name)
+    if spec is None:
+        wire = {"ok": False, "error": "unknown_tool", "message": "请使用已有工具。"}
+        return _fail(
+            code="unknown_tool",
+            error_type="ToolNotFoundError",
+            message=str(wire["message"]),
+            wire=wire,
+            tool_name=name,
+            duration_ms=elapsed_ms(),
+        )
+
+    try:
+        for arg_name, kind in resource_args(spec).items():
+            value = arguments.get(arg_name) if isinstance(arguments, dict) else None
+            if value is None:
+                continue  # 可选资源参数允许省略
+            _resolve_resource(kind, value)
+        check_policy(spec)
+    except ToolPermissionError as exc:
+        wire = {"ok": False, "error": "permission_denied", "message": str(exc)}
+        return _fail(
+            code="permission_denied",
+            error_type="ToolPermissionError",
+            message=str(exc),
+            wire=wire,
+            tool_name=name,
+            duration_ms=elapsed_ms(),
+            **exc.context,
         )
 
     try:

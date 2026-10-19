@@ -178,7 +178,7 @@ Graph State / workflow、数据库迁移配置、前端 `package.json` 与 Compo
 
 MCP 工具负责参数、资源校验、产物保存与返回结构；Provider 负责固定命令、超时和后端结果解析。每次计算仍执行可执行程序。服务端复查自己的权限边界，annotations 只是行为提示。
 
-`tools/`目前实现发现工具的参数校验与MCP调用；完整登记、风险策略和其他执行入口仍需后续建设。模型客户端只发送请求，当前Loop负责组织消息与工具反馈。
+`tools/` 已实现发现工具的参数校验、`ToolSpec` 规格表、资源边界与风险策略，并由 `executor` 作为唯一执行入口调用 MCP；预算/超时/Trace 留在 04 段。模型客户端只发送请求，当前 Loop 负责组织消息与工具反馈。
 
 ## 运行当前 Demo
 
@@ -202,7 +202,7 @@ uv sync --frozen --extra m1 --extra dev
 | `CRYPTO_MAX_FILE_BYTES` | `104857600` | 签名和 SHA-256 的最大输入字节数 |
 | `CRYPTO_TIMEOUT_S` | `10` | 单次密码命令的超时秒数 |
 
-例如在 `.env` 中写入 `CRYPTO_KEY_ROOT=/srv/agent/keys`、`CRYPTO_DATA_ROOT=/srv/agent/files`，服务就会按这些目录解析 `key_id` 和 `file_id`。这两个目录仍由服务端管理，不由模型传入任意路径。默认情况下，SM2 文件工具使用 `file_id` 定位 `data/<file_id>/` 中的唯一原始输入文件，使用 `key_id` 定位 `keys/<key_id>/` 中的密钥；算法保存在密钥目录的 `metadata.json`。签名结果保存为 `signature.der`；SM2 公钥加密单次最多处理 255 字节，结果保存为 `ciphertext.der`。`sm2_dec` 使用对应私钥解密该密文，结果以权限 `0600` 保存为同目录的 `decrypted.bin`，MCP 只返回文件名，不返回明文。服务端通过 GmSSL 的 `-in`/`-out` 处理文件，写操作成功后才发布结果文件。`sha256_file(file_id)` 使用配置的 OpenSSL 对同一目录中的唯一原始文件计算 SHA-256，返回十六进制摘要，不返回文件内容。当前密钥生成、签名和加解密沿用教学 Demo 的行为。
+例如在 `.env` 中写入 `CRYPTO_KEY_ROOT=/srv/agent/keys`、`CRYPTO_DATA_ROOT=/srv/agent/files`，服务就会按这些目录解析 `key_id` 和 `file_id`。这两个目录仍由服务端管理，不由模型传入任意路径。默认情况下，SM2 文件工具使用 `file_id` 定位 `data/<file_id>/` 中的唯一原始输入文件，使用 `key_id` 定位 `keys/<key_id>/` 中的密钥；算法保存在密钥目录的 `metadata.json`。签名结果保存为 `signature.der`；SM2 公钥加密单次最多处理 255 字节，结果保存为 `ciphertext.der`。`sm2_dec` 使用对应私钥解密该密文，结果以权限 `0600` 保存为同目录的 `decrypted.bin`，MCP 只返回文件名，不返回明文。服务端通过 GmSSL 的 `-in`/`-out` 处理文件，写操作成功后才发布结果文件。`sha256_file(file_id)` 使用配置的 OpenSSL 对同一目录中的唯一原始文件计算 SHA-256，返回十六进制摘要，不返回文件内容。当前密钥生成、签名和加解密沿用教学 Demo 的行为。02–04 段 MCP 只暴露只读工具（`sha256_file`、`sm2_verify_signature`），写工具 06 段再恢复注册。
 
 单独启动服务：
 
