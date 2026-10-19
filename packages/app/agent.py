@@ -5,7 +5,9 @@ import asyncio
 import json
 import sys
 import time
+from dataclasses import dataclass, field
 from datetime import UTC, datetime
+from enum import StrEnum
 from typing import Any, cast
 from uuid import uuid4
 
@@ -86,6 +88,141 @@ def _evidence(outcome: ToolResult[Any], result: dict[str, Any]) -> dict[str, Any
     }
 
 
+class Phase(StrEnum):
+    """Loop 的显式状态。合法的下一步见 _ALLOWED。"""
+
+    REQUEST_MODEL = "request_model"  # 唯一的决策点：请求模型并决定下一步
+    DISPATCH_TOOLS = "dispatch_tools"  # 执行 pending_calls，结果回传
+    FINISH = "finish"  # 正常结束：模型不再提议工具
+    STOPPED = "stopped"  # 预算/轮次耗尽：结束但不回答
+
+
+# 转移表本身就是自检问题 4 的答案：只有 REQUEST_MODEL 能决定结束。
+_ALLOWED: dict[Phase, frozenset[Phase]] = {
+    Phase.REQUEST_MODEL: frozenset({Phase.FINISH, Phase.DISPATCH_TOOLS, Phase.STOPPED}),
+    Phase.DISPATCH_TOOLS: frozenset({Phase.REQUEST_MODEL}),
+    Phase.FINISH: frozenset(),
+    Phase.STOPPED: frozenset(),
+}
+
+
+@dataclass
+class LoopState:
+    """一次 Run 的控制流数据。
+
+    只放数据、不放回调和连接：05 段可以直接把它序列化进 agent_runs/agent_steps，
+    06 段恢复时据此决定从哪个 Phase 继续。pending_calls 也是 04 段流式累积的落点。
+    """
+
+    run_id: str
+    messages: list[dict[str, Any]]
+    evidence: list[dict[str, Any]] = field(default_factory=list)
+    step_index: int = 0
+    phase: Phase = Phase.REQUEST_MODEL
+    pending_calls: list[dict[str, Any]] = field(default_factory=list)
+    answer: str = ""
+    stop_reason: str = ""
+
+
+class LoopStopped(RuntimeError):
+    """轮次/预算耗尽导致的停止；由 run() 转成 status=stopped 的结构化结果。"""
+
+    def __init__(self, reason: str, steps: int) -> None:
+        super().__init__(f"Loop 已停止（{reason}），共执行 {steps} 步")
+        self.reason = reason
+        self.steps = steps
+
+
+def _enter(state: LoopState, next_phase: Phase) -> None:
+    """唯一的转移入口：非法转移当场失败，而不是悄悄跑错分支。"""
+    if next_phase not in _ALLOWED[state.phase]:
+        raise RuntimeError(f"非法状态转移：{state.phase.value} -> {next_phase.value}")
+    state.phase = next_phase
+
+
+async def _request_model(
+    state: LoopState,
+    *,
+    tools: list[dict[str, Any]],
+    model: str,
+    base_url: str,
+    max_steps: int,
+) -> None:
+    """REQUEST_MODEL：检查轮次预算 → 请求模型 → 进入 FINISH / DISPATCH_TOOLS / STOPPED。
+
+    04 段在这里加 deadline、四类错误分类；03 段不需要动这里。
+    """
+    if state.step_index >= max_steps:
+        state.stop_reason = "max_steps"
+        _enter(state, Phase.STOPPED)
+        return
+
+    assistant = await asyncio.to_thread(
+        call_model, state.messages, tools=tools, model=model, base_url=base_url
+    )
+    state.messages.append(assistant)
+
+    tool_calls = assistant.get("tool_calls") or []
+    if not tool_calls:
+        state.answer = cast(str, assistant.get("content", ""))
+        _enter(state, Phase.FINISH)
+        return
+
+    state.pending_calls = list(tool_calls)
+    _enter(state, Phase.DISPATCH_TOOLS)
+
+
+async def _dispatch_tools(
+    state: LoopState,
+    *,
+    session: ClientSession,
+    tools: list[dict[str, Any]],
+) -> None:
+    """DISPATCH_TOOLS：逐个执行 pending_calls，回传后回到 REQUEST_MODEL。
+
+    03 段授权在 execute_tool 内；拒绝记录与 04 段预算/超时/重复检测
+    都挂在这里的循环前后，不需要再改整体结构。
+    """
+    for index, call in enumerate(state.pending_calls):
+        function = call.get("function") or {}
+        name = function.get("name", "")
+        arguments = function.get("arguments", {})
+        # 两个号分工不同：call_id 是应用自己的账本号；provider_call_id 是模型侧的
+        # 回执号，只用于把 tool 消息绑回那次请求，不作为可信身份。
+        provider_call_id = call.get("id")
+        if not isinstance(provider_call_id, str) or not provider_call_id:
+            provider_call_id = None
+        tool_call = ToolCall(
+            call_id=f"call_{state.step_index:02d}_{index}",
+            tool_name=name,
+            arguments=_as_arguments(arguments),
+            step_index=state.step_index,
+            run_id=state.run_id,
+        )
+        started = time.monotonic()
+        result = await execute_tool(session, name, arguments, tools)
+        outcome = _to_result(
+            tool_call, result, (time.monotonic() - started) * 1000, provider_call_id
+        )
+        print(f"[工具]{name}({arguments}) -> {result}", file=sys.stderr)
+        state.evidence.append(_evidence(outcome, result))
+
+        state.messages.append(
+            {
+                "role": "tool",
+                "tool_name": name,
+                # 协议回执：优先回填 provider 的 id（严格后端会校验），没有才回落内部号。
+                "tool_call_id": provider_call_id or tool_call.call_id,
+                # 模型可见的字节保持不变，避免改动影响提示词效果。
+                "content": json.dumps(result, ensure_ascii=False),
+            }
+        )
+
+    state.pending_calls = []
+    state.step_index += 1
+    _enter(state, Phase.REQUEST_MODEL)
+
+
 async def chat_turn(
     messages: list[dict[str, Any]],
     user_text: str,
@@ -101,53 +238,24 @@ async def chat_turn(
     # 一次 Agent 任务的身份；调用方没给就新建。多轮对话每轮是一个新的 run。
     run_id = run_id or uuid4().hex
     messages.append({"role": "user", "content": user_text})
-    for step in range(max_steps):
-        assistant = await asyncio.to_thread(
-            call_model, messages, tools=tools, model=model, base_url=base_url
-        )
-        messages.append(assistant)
+    state = LoopState(
+        run_id=run_id,
+        messages=messages,
+        evidence=evidence if evidence is not None else [],
+    )
 
-        tool_calls = assistant.get("tool_calls") or []
-        if not tool_calls:
-            return cast(str, assistant.get("content", ""))
-
-        for index, call in enumerate(tool_calls):
-            function = call.get("function") or {}
-            name = function.get("name", "")
-            arguments = function.get("arguments", {})
-            # 两个号分工不同：call_id 是应用自己的账本号；provider_call_id 是模型侧的
-            # 回执号，只用于把 tool 消息绑回那次请求，不作为可信身份。
-            provider_call_id = call.get("id")
-            if not isinstance(provider_call_id, str) or not provider_call_id:
-                provider_call_id = None
-            tool_call = ToolCall(
-                call_id=f"call_{step:02d}_{index}",
-                tool_name=name,
-                arguments=_as_arguments(arguments),
-                step_index=step,
-                run_id=run_id,
+    # 显式循环：每轮进入哪个 Phase 由状态决定，结束只有 FINISH 和 STOPPED 两种。
+    while True:
+        if state.phase is Phase.REQUEST_MODEL:
+            await _request_model(
+                state, tools=tools, model=model, base_url=base_url, max_steps=max_steps
             )
-            started = time.monotonic()
-            result = await execute_tool(session, name, arguments, tools)
-            outcome = _to_result(
-                tool_call, result, (time.monotonic() - started) * 1000, provider_call_id
-            )
-            print(f"[工具]{name}({arguments}) -> {result}", file=sys.stderr)
-            if evidence is not None:
-                evidence.append(_evidence(outcome, result))
-
-            messages.append(
-                {
-                    "role": "tool",
-                    "tool_name": name,
-                    # 协议回执：优先回填 provider 的 id（严格后端会校验），没有才回落内部号。
-                    "tool_call_id": provider_call_id or tool_call.call_id,
-                    # 模型可见的字节保持不变，避免改动影响提示词效果。
-                    "content": json.dumps(result, ensure_ascii=False),
-                }
-            )
-
-    raise RuntimeError(f"工具调用超过 {max_steps} 轮，已停止")
+        elif state.phase is Phase.DISPATCH_TOOLS:
+            await _dispatch_tools(state, session=session, tools=tools)
+        elif state.phase is Phase.FINISH:
+            return state.answer
+        else:  # Phase.STOPPED
+            raise LoopStopped(state.stop_reason, state.step_index)
 
 
 async def main() -> int:
@@ -199,17 +307,27 @@ async def run(*, question: str) -> dict[str, object]:
     messages = [SYSTEM_PROMPT.copy()]
     run_id = uuid4().hex
     evidence: list[dict[str, Any]] = []
-    async with connect_tools() as (session, tools):
-        answer = await chat_turn(
-            messages,
-            question,
-            session=session,
-            tools=tools,
-            model=settings.CONTROLLER_MODEL,
-            base_url=settings.OLLAMA_BASE_URL,
-            evidence=evidence,
-            run_id=run_id,
-        )
+    try:
+        async with connect_tools() as (session, tools):
+            answer = await chat_turn(
+                messages,
+                question,
+                session=session,
+                tools=tools,
+                model=settings.CONTROLLER_MODEL,
+                base_url=settings.OLLAMA_BASE_URL,
+                evidence=evidence,
+                run_id=run_id,
+            )
+    except LoopStopped as exc:
+        # 撞限不是崩溃：给出结构化停止原因，05 段可以直接落库。
+        return {
+            "status": "stopped",
+            "reason": exc.reason,
+            "steps": exc.steps,
+            "run_id": run_id,
+            "evidence": evidence,
+        }
     return {"status": "completed", "run_id": run_id, "answer": answer, "evidence": evidence}
 
 
