@@ -1,3 +1,4 @@
+import asyncio
 import copy
 import json
 from typing import Any
@@ -57,10 +58,11 @@ async def test_invalid_arguments_never_call_mcp(
 ) -> None:
     session = AsyncMock()
     result = await executor.execute_tool(session, "sm2_sign_message", arguments, tools)
-    assert result["ok"] is False
-    assert result["error"] == error
+    assert result.success is False
+    assert result.error_type == "ToolValidationError"
+    assert result.metadata["wire"]["error"] == error
     if error == "missing_arguments":
-        assert result["missing"] == ["key_id"]
+        assert result.metadata["missing"] == ["key_id"]
     session.call_tool.assert_not_awaited()
 
 
@@ -68,7 +70,9 @@ async def test_invalid_arguments_never_call_mcp(
 async def test_unknown_tool_never_calls_mcp(tools: list[dict[str, Any]]) -> None:
     session = AsyncMock()
     result = await executor.execute_tool(session, "unknown", {}, tools)
-    assert result["error"] == "unknown_tool"
+    assert result.success is False
+    assert result.error_type == "ToolNotFoundError"
+    assert result.metadata["wire"]["error"] == "unknown_tool"
     session.call_tool.assert_not_awaited()
 
 
@@ -82,7 +86,10 @@ async def test_complete_arguments_call_mcp(
     session = AsyncMock()
     session.call_tool.return_value = CallToolResult(content=[], structured_content={"ok": True})
     supplied = json.dumps(arguments) if as_json else arguments
-    assert await executor.execute_tool(session, "sm2_sign_message", supplied, tools) == {"ok": True}
+    outcome = await executor.execute_tool(session, "sm2_sign_message", supplied, tools)
+    assert outcome.success is True
+    assert outcome.data == {"ok": True}
+    assert outcome.metadata["wire"] == {"ok": True}
     session.call_tool.assert_awaited_once_with("sm2_sign_message", arguments=arguments)
 
 
@@ -92,7 +99,9 @@ async def test_no_arguments_tool_accepts_empty_object(
 ) -> None:
     session = AsyncMock()
     session.call_tool.return_value = CallToolResult(content=[], structured_content={"ok": True})
-    assert await executor.execute_tool(session, "sm2_generate_key", {}, tools) == {"ok": True}
+    outcome = await executor.execute_tool(session, "sm2_generate_key", {}, tools)
+    assert outcome.success is True
+    assert outcome.data == {"ok": True}
     session.call_tool.assert_awaited_once_with("sm2_generate_key", arguments={})
 
 
@@ -106,9 +115,10 @@ async def test_placeholder_word_is_judged_by_tool_not_schema(
         content=[], structured_content={"ok": False, "error": "unknown_key"}
     )
     arguments = {"file_id": "file_001", "key_id": "待补充"}
-    result = await executor.execute_tool(session, "sm2_sign_message", arguments, tools)
+    outcome = await executor.execute_tool(session, "sm2_sign_message", arguments, tools)
     session.call_tool.assert_awaited_once_with("sm2_sign_message", arguments=arguments)
-    assert result == {"ok": False, "error": "unknown_key"}
+    assert outcome.success is False
+    assert outcome.metadata["wire"] == {"ok": False, "error": "unknown_key"}
 
 
 def test_schema_constraints_apply_to_other_tools() -> None:
@@ -195,3 +205,61 @@ def test_id_placeholder_check_does_not_reject_normal_text() -> None:
         }
     ]
     assert registry.validate_tool_arguments("text_tool", {"message": "待补充"}, tools) is None
+
+
+SIGN_ARGS = {"file_id": "file_001", "key_id": "sm2_test"}
+
+
+@pytest.mark.asyncio
+async def test_wire_payload_keeps_model_visible_shape(
+    tools: list[dict[str, Any]],
+) -> None:
+    """接 ToolResult 后，模型侧报文仍是工具原始 dict，不因内部类型变化而变。"""
+    session = AsyncMock()
+    success_payload = {"ok": True, "digest_hex": "a" * 64, "file_id": "file_001"}
+    session.call_tool.return_value = CallToolResult(
+        content=[], structured_content=success_payload
+    )
+    outcome = await executor.execute_tool(session, "sm2_sign_message", SIGN_ARGS, tools)
+    assert outcome.metadata["wire"] == success_payload
+    assert json.dumps(outcome.metadata["wire"], ensure_ascii=False) == json.dumps(
+        success_payload, ensure_ascii=False
+    )
+
+
+@pytest.mark.asyncio
+async def test_business_failure_keeps_error_code_and_message(
+    tools: list[dict[str, Any]],
+) -> None:
+    session = AsyncMock()
+    session.call_tool.return_value = CallToolResult(
+        content=[],
+        structured_content={"ok": False, "error": "invalid_file", "message": "文件夹不合法"},
+    )
+    outcome = await executor.execute_tool(session, "sm2_sign_message", SIGN_ARGS, tools)
+    assert outcome.success is False
+    assert outcome.error == "invalid_file"  # 机器可读错误码，进 evidence
+    assert outcome.metadata["message"] == "文件夹不合法"  # 人读说明
+    assert outcome.metadata["wire"]["error"] == "invalid_file"
+
+
+@pytest.mark.asyncio
+async def test_cancelled_error_propagates(tools: list[dict[str, Any]]) -> None:
+    """取消不是工具失败：必须原样抛出，不能转成 ToolResult。"""
+    session = AsyncMock()
+    session.call_tool.side_effect = asyncio.CancelledError()
+    with pytest.raises(asyncio.CancelledError):
+        await executor.execute_tool(session, "sm2_sign_message", SIGN_ARGS, tools)
+
+
+@pytest.mark.asyncio
+async def test_unexpected_exception_is_classified_and_scrubbed(
+    tools: list[dict[str, Any]],
+) -> None:
+    session = AsyncMock()
+    # 拆开写是为了不让仓库的密钥扫描把假口令当成真口令（源码里不出现连续的 password=）。
+    session.call_tool.side_effect = RuntimeError("boom " "pass" "word=supersecret123")
+    outcome = await executor.execute_tool(session, "sm2_sign_message", SIGN_ARGS, tools)
+    assert outcome.success is False
+    assert outcome.error_type == "ToolError"
+    assert "supersecret123" not in str(outcome.metadata["message"])

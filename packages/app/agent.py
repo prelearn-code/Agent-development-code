@@ -4,7 +4,6 @@ import argparse
 import asyncio
 import json
 import sys
-import time
 from dataclasses import dataclass, field
 from datetime import UTC, datetime
 from enum import StrEnum
@@ -44,44 +43,24 @@ def _as_arguments(arguments: Any) -> dict[str, Any]:
     return arguments if isinstance(arguments, dict) else {}
 
 
-def _to_result(
-    call: ToolCall,
-    result: dict[str, Any],
-    duration_ms: float,
-    provider_call_id: str | None = None,
-) -> ToolResult[Any]:
-    """把工具原始结果包成契约类型；success 以工具自己的 ok 字段为准。"""
-    ok = result.get("ok") is True
-    return ToolResult(
-        success=ok,
-        data=result if ok else None,
-        error=None if ok else str(result.get("error", "tool_error")),
-        metadata={
-            "run_id": call.run_id,
-            "call_id": call.call_id,
-            "provider_call_id": provider_call_id,
-            "tool_name": call.tool_name,
-            "step_index": call.step_index,
-            "duration_ms": round(duration_ms, 3),
-            "started_at": datetime.now(UTC).isoformat(),
-            "raw": result,
-        },
-    )
+def _evidence(outcome: ToolResult[Any]) -> dict[str, Any]:
+    """可审计的一条证据：谁、第几步、跑了什么、拿到什么、耗时多少。
 
-
-def _evidence(outcome: ToolResult[Any], result: dict[str, Any]) -> dict[str, Any]:
-    """可审计的一条证据：谁、第几步、跑了什么、拿到什么、耗时多少。"""
+    ToolResult 现在由 executor 直接产出；这里只补上 run/call 维度的字段，
+    模型可见的原始 dict 在 metadata["wire"] 里。
+    """
+    metadata = outcome.metadata
     return {
-        "run_id": outcome.metadata["run_id"],
-        "call_id": outcome.metadata["call_id"],
-        "provider_call_id": outcome.metadata["provider_call_id"],
-        "tool_name": outcome.metadata["tool_name"],
-        "step_index": outcome.metadata["step_index"],
+        "run_id": metadata.get("run_id"),
+        "call_id": metadata.get("call_id"),
+        "provider_call_id": metadata.get("provider_call_id"),
+        "tool_name": metadata.get("tool_name"),
+        "step_index": metadata.get("step_index"),
         "ok": outcome.success,
         "error": outcome.error,
-        "result": result,
-        "duration_ms": outcome.metadata["duration_ms"],
-        "started_at": outcome.metadata["started_at"],
+        "result": metadata.get("wire", {}),
+        "duration_ms": metadata.get("duration_ms"),
+        "started_at": metadata.get("started_at"),
     }
 
 
@@ -196,13 +175,19 @@ async def _dispatch_tools(
             step_index=state.step_index,
             run_id=state.run_id,
         )
-        started = time.monotonic()
-        result = await execute_tool(session, name, arguments, tools)
-        outcome = _to_result(
-            tool_call, result, (time.monotonic() - started) * 1000, provider_call_id
-        )
-        print(f"[工具]{name}({arguments}) -> {result}", file=sys.stderr)
-        state.evidence.append(_evidence(outcome, result))
+        # started_at 在调用前记录；耗时由 executor 统一测量并写进 metadata。
+        started_at = datetime.now(UTC).isoformat()
+        outcome = await execute_tool(session, name, arguments, tools)
+        outcome.metadata |= {
+            "run_id": state.run_id,
+            "call_id": tool_call.call_id,
+            "provider_call_id": provider_call_id,
+            "step_index": state.step_index,
+            "started_at": started_at,
+        }
+        wire = outcome.metadata.get("wire", {})
+        print(f"[工具]{name}({arguments}) -> {wire}", file=sys.stderr)
+        state.evidence.append(_evidence(outcome))
 
         state.messages.append(
             {
@@ -210,8 +195,8 @@ async def _dispatch_tools(
                 "tool_name": name,
                 # 协议回执：优先回填 provider 的 id（严格后端会校验），没有才回落内部号。
                 "tool_call_id": provider_call_id or tool_call.call_id,
-                # 模型可见的字节保持不变，避免改动影响提示词效果。
-                "content": json.dumps(result, ensure_ascii=False),
+                # 模型可见的字节保持不变：仍然发工具原始 dict（wire），内部才用 ToolResult。
+                "content": json.dumps(wire, ensure_ascii=False),
             }
         )
 
