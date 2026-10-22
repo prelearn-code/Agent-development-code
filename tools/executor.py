@@ -9,7 +9,7 @@ import json
 import time
 from typing import Any
 
-from mcp import ClientSession
+from mcp import Client
 from packages.core.config import get_settings
 from packages.core.errors import ToolPermissionError
 from packages.core.logging import scrub
@@ -72,7 +72,7 @@ def _resolve_resource(kind: str, value: Any) -> None:
 
 
 async def execute_tool(
-    session: ClientSession,
+    session: Client,
     name: str,
     arguments: Any,
     tools: list[dict[str, Any]],
@@ -175,6 +175,19 @@ async def execute_tool(
         )
 
     text = "\n".join(block.text for block in result.content if block.type == "text")
+    # 先判 is_error：MCP 错误时 text 是错误说明，不是 JSON，不能先去做解析。
+    if result.is_error:
+        message = scrub(text) or "工具执行失败。"
+        wire = {"ok": False, "error": message}
+        return _fail(
+            code="tool_execution_failed",
+            error_type="ToolError",
+            message=message,
+            wire=wire,
+            tool_name=name,
+            duration_ms=elapsed_ms(),
+        )
+
     if result.structured_content is not None:
         payload: Any = result.structured_content
     else:
@@ -191,18 +204,6 @@ async def execute_tool(
                 tool_name=name,
                 duration_ms=elapsed_ms(),
             )
-
-    if result.is_error:
-        message = scrub(text) or "工具执行失败。"
-        wire = {"ok": False, "error": message}
-        return _fail(
-            code="tool_execution_failed",
-            error_type="ToolError",
-            message=message,
-            wire=wire,
-            tool_name=name,
-            duration_ms=elapsed_ms(),
-        )
 
     if not isinstance(payload, dict):
         return ToolResult.ok(

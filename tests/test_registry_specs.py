@@ -94,3 +94,8 @@ def test_resource_args_returns_a_copy() -> None:
 
 def test_empty_tool_list_yields_empty_specs() -> None:
     assert build_toolspecs([]) == {}
+
+
+def test_non_string_tool_name_is_skipped() -> None:
+    specs = build_toolspecs([{"function": {"name": 123, "parameters": {}}}])
+    assert specs == {}

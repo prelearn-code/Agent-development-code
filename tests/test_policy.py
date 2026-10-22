@@ -42,7 +42,7 @@ def test_write_tools_require_approval(name: str, risk: RiskLevel) -> None:
     assert excinfo.value.context == {"tool": name, "risk": "L2_WRITE"}
     assert "审批" in str(excinfo.value)
 
-
+ 
 def test_destructive_tools_are_rejected() -> None:
     with pytest.raises(ToolPermissionError):
         check_policy(_spec("destroy_key", RiskLevel.L4_DESTRUCTIVE))

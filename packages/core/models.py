@@ -12,17 +12,16 @@
 
 from __future__ import annotations
 
-from datetime import datetime, timezone
+from collections.abc import Awaitable, Callable
+from datetime import UTC, datetime
 from enum import IntEnum
-from typing import Any, Awaitable, Callable, Generic, Literal, TypeVar
+from typing import Any, Literal
 
 from pydantic import BaseModel, ConfigDict, Field
 
-T = TypeVar("T")
-
 
 def _utcnow() -> datetime:
-    return datetime.now(timezone.utc)
+    return datetime.now(UTC)
 
 
 class RiskLevel(IntEnum):
@@ -49,7 +48,7 @@ class Citation(BaseModel):
     quote: str | None = None
 
 
-class ToolResult(BaseModel, Generic[T]):
+class ToolResult[T](BaseModel):
     """所有工具的统一返回类型。
 
     契约：
@@ -74,7 +73,7 @@ class ToolResult(BaseModel, Generic[T]):
         *,
         citations: list[Citation] | None = None,
         **metadata: Any,
-    ) -> "ToolResult[T]":
+    ) -> ToolResult[T]:
         """成功。data 可以为空集合 —— 这不代表失败。"""
         return cls(
             success=True,
@@ -90,7 +89,7 @@ class ToolResult(BaseModel, Generic[T]):
         *,
         error_type: str | None = None,
         **metadata: Any,
-    ) -> "ToolResult[T]":
+    ) -> ToolResult[T]:
         return cls(
             success=False,
             error=error,

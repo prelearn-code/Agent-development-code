@@ -3,6 +3,7 @@
 from pathlib import Path
 
 import pytest
+from packages.core.config import Settings
 from packages.core.errors import ToolPermissionError
 from packages.security import resources
 
@@ -59,13 +60,10 @@ def test_pick_message_file_requires_exactly_one_file(tmp_path: Path) -> None:
         resources.pick_message_file(directory, max_bytes=100)
 
 
-def test_resolve_key_returns_bundle(
-    tmp_path: Path, monkeypatch: pytest.MonkeyPatch
-) -> None:
+def test_resolve_key_returns_bundle(tmp_path: Path, monkeypatch: pytest.MonkeyPatch) -> None:
     from packages.crypto import keystore
 
     monkeypatch.setattr(keystore, "_KEY_DIR", tmp_path / "keys")
-    monkeypatch.setattr(keystore, "CONFIGURED_KEYS", {})
     key_id = "sm2_" + "d" * 32
     directory = tmp_path / "keys" / key_id
     directory.mkdir(parents=True)
@@ -102,3 +100,21 @@ def test_gates_return_resolved_paths(tmp_path: Path) -> None:
     assert resources.resolve_file("file_006", root=root) == directory.resolve()
     picked = resources.require_message_file("file_006", max_bytes=100, root=root)
     assert picked.name == "data.md"
+
+
+def test_pick_message_file_rejects_symlinked_message(tmp_path: Path) -> None:
+    directory = _data_root(tmp_path) / "file_007"
+    directory.mkdir()
+    target = tmp_path / "outside.bin"
+    target.write_text("x", encoding="utf-8")
+    (directory / "data.md").symlink_to(target)
+    with pytest.raises(resources.ResourceError):
+        resources.pick_message_file(directory, max_bytes=100)
+
+
+def test_resolve_file_uses_configured_root(tmp_path: Path, monkeypatch: pytest.MonkeyPatch) -> None:
+    root = tmp_path / "data"
+    (root / "file_009").mkdir(parents=True)
+    settings = Settings.model_construct(CRYPTO_DATA_ROOT=str(root))
+    monkeypatch.setattr("packages.security.resources.get_settings", lambda: settings)
+    assert resources.resolve_file("file_009") == (root / "file_009").resolve()

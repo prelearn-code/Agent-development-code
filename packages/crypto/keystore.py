@@ -14,12 +14,7 @@ from uuid import uuid4
 from packages.core.config import get_settings
 
 _KEY_DIR = get_settings().crypto_key_root
-_KEY_ID_PATTERN = re.compile(r"[a-z][a-z0-9]{1,7}_[0-9a-f]{32}")
-
-# 受信任的外部密钥（教学环境的 "default" 等）；值为 (私钥, 口令) 路径。
-CONFIGURED_KEYS: dict[str, tuple[Path, Path]] = {
-    "default": (_KEY_DIR / "default" / "private.pem", _KEY_DIR / "default" / "password.txt"),
-}
+_KEY_ID_PATTERN = re.compile(r"([a-z0-9]{2,7})_[0-9a-f]{32}")
 
 
 @dataclass(frozen=True)
@@ -48,7 +43,7 @@ def generate_sm2_key() -> dict[str, Any]:
     metadata = {
         "key_id": key_id,
         "algorithm": "SM2",
-        "purpose": "sign",
+        "purpose": "sign/enc",
         "created_at": datetime.now(UTC).isoformat(),
     }
     try:
@@ -104,29 +99,16 @@ def generate_sm2_key() -> dict[str, Any]:
 
 
 def find_key(key_id: str) -> KeyBundle | None:
-    """按 key_id 找到 `keys/<key_id>/`，与算法无关。
+    """按 `算法_32位ID` 查找 `keys/<key_id>/`，算法前缀须与 metadata 一致。
 
     只校验 ID 形状、目录/metadata 完整性；**不检查私钥/口令文件是否存在**，
     否则"目录和 metadata 都对、但私钥丢了"会从 `key_unavailable` 变成
     `unknown_key`，改变错误语义。
     """
-    if _KEY_DIR.is_symlink():
+    match = _KEY_ID_PATTERN.fullmatch(key_id)
+    if match is None or _KEY_DIR.is_symlink():
         return None
-    configured = CONFIGURED_KEYS.get(key_id)
-    if configured is not None:
-        private_key, password_file = configured
-        return KeyBundle(
-            key_id=key_id,
-            algorithm="SM2",
-            purpose="configured",
-            directory=private_key.parent,
-            private_key=private_key,
-            public_key=private_key.with_name("public.pem"),
-            password_file=password_file,
-        )
-    # 仅解析服务端生成的标识；重启后无需依赖内存中的注册表。
-    if _KEY_ID_PATTERN.fullmatch(key_id) is None:
-        return None
+    algorithm = match.group(1).upper()
     directory = _KEY_DIR / key_id
     metadata_file = directory / "metadata.json"
     if directory.is_symlink() or metadata_file.is_symlink() or not metadata_file.is_file():
@@ -139,12 +121,10 @@ def find_key(key_id: str) -> KeyBundle | None:
         metadata = json.loads(metadata_bytes)
     except (OSError, UnicodeError, ValueError):
         return None
-    algorithm = metadata.get("algorithm") if isinstance(metadata, dict) else None
     if (
         not isinstance(metadata, dict)
         or metadata.get("key_id") != key_id
-        or not isinstance(algorithm, str)
-        or not algorithm
+        or metadata.get("algorithm") != algorithm
     ):
         return None
     return KeyBundle(

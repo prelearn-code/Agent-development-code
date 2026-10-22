@@ -6,8 +6,7 @@ from collections.abc import AsyncIterator
 from contextlib import asynccontextmanager
 from typing import Any
 
-from mcp import ClientSession, StdioServerParameters
-from mcp.client.stdio import stdio_client
+from mcp import Client, StdioServerParameters
 
 from mcp_integration.client.bridge import discover_tools
 
@@ -33,8 +32,7 @@ def _server_parameters() -> StdioServerParameters:
 
 
 @asynccontextmanager
-async def connect_tools() -> AsyncIterator[tuple[ClientSession, list[dict[str, Any]]]]:
+async def connect_tools() -> AsyncIterator[tuple[Client, list[dict[str, Any]]]]:
     param = _server_parameters()
-    async with stdio_client(param) as (read, write), ClientSession(read, write) as session:
-        await session.initialize()
+    async with Client(param) as session:
         yield session, await discover_tools(session)

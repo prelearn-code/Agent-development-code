@@ -2,10 +2,10 @@
 
 from typing import Any
 
-from mcp import ClientSession
+from mcp import Client
 
 
-async def discover_tools(session: ClientSession) -> list[dict[str, Any]]:
+async def discover_tools(session: Client) -> list[dict[str, Any]]:
     discovered = await session.list_tools()
     return [
         {

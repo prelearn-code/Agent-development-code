@@ -7,8 +7,7 @@ from pathlib import Path
 
 import anyio
 import pytest
-from mcp import ClientSession, StdioServerParameters
-from mcp.client.stdio import stdio_client
+from mcp import Client, StdioServerParameters
 from mcp_integration.server_crypto.openssl_tools import tools as openssl_tools
 from packages.crypto.providers import openssl_cli
 
@@ -66,8 +65,7 @@ async def test_sha256_file_over_stdio(tmp_path: Path) -> None:
         env={**os.environ, "CRYPTO_DATA_ROOT": str(tmp_path)},
     )
     with anyio.fail_after(15):
-        async with stdio_client(parameters) as (read, write), ClientSession(read, write) as session:
-            await session.initialize()
+        async with Client(parameters) as session:
             tools = await session.list_tools()
             sha256 = next(tool for tool in tools.tools if tool.name == "sha256_file")
             assert set(sha256.input_schema["required"]) == {"file_id"}

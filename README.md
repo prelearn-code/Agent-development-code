@@ -126,6 +126,8 @@ Graph State / workflow、数据库迁移配置、前端 `package.json` 与 Compo
 
 以后新增的输入文件和密码产物统一放在项目根目录的 `data/<file_id>/`，不再按 SM2 等算法增加目录层级；教学密钥放在 `keys/<key_id>/`，算法记录在各密钥目录的 `metadata.json` 中。两个根目录均被 Git 忽略。旧的 `data/SM2/<file_id>/` 数据不会自动迁移；若需继续通过 MCP 使用，应将相应的 `<file_id>` 文件夹移至 `data/`。
 
+`key_id` 使用 `<算法小写>_<32位十六进制ID>`，例如 `sm2_` 加 32 位 ID。查找时以完整 `key_id` 作为目录名，并检查 `metadata.json` 的 `key_id` 与算法（如 `SM2`）和入参一致；不再支持 `default` 等配置别名。私钥、公钥和口令文件是否可用由具体工具或 Provider 检查。
+
 ## 模块职责
 
 | 目录 | 职责 |
@@ -190,6 +192,8 @@ uv sync --frozen --extra m1 --extra dev
 ```
 
 默认模型为 `qwen3.5:4b`，地址为 `http://127.0.0.1:11434`。交互入口可通过 `--model`、`--base-url` 修改；模型请求超时由 `LLM_TIMEOUT_S` 控制。入口会自动启动当前 stdio MCP 服务。
+
+模型请求使用 HTTPX `AsyncClient`，`packages.llm.client.call_model()` 是异步函数，调用时使用 `await`。入口通过 `create_model_client()` 在单次任务或整个交互会话中复用连接池，并在退出时关闭；独立调用 `call_model()` 时也会自行创建和关闭连接。请求仍使用 Ollama 原生非流式 `/api/chat` 格式。MCP 连接使用 SDK 2.x 的 `Client` 管理初始化与关闭，工具调用仍统一经过 `tools/executor.py`。核心 `ToolResult[T]` 使用 Python 3.12 泛型语法，字段与 JSON 格式保持原契约。
 
 密码工具的路径和执行限制统一由 `packages/core/config.py` 中的 `Settings` 管理。需要改动时，把 `.env.example` 复制为项目根目录的 `.env`，只填写要覆盖的配置项；环境变量优先于 `.env`，修改后重启 Agent/MCP 服务。相对路径均以代码仓库根目录为基准，启动命令所在目录不会改变它们。
 

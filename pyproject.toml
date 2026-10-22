@@ -4,11 +4,12 @@ version = "0.0.1"
 description = "密码工具 Agent - 逐步交付的学习骨架"
 requires-python = ">=3.12"
 # 依赖组名保留兼容，执行顺序按V0-V6；不要一次装全。
-#   M1: pydantic / httpx（pydantic-settings 为基础配置依赖）
+#   M1: pydantic（httpx 为异步模型请求基础依赖，pydantic-settings 为基础配置依赖）
 #   M2: fastapi / uvicorn / sqlalchemy / asyncpg / alembic
 #   M3: qdrant-client / pymupdf / rank-bm25 / jieba
 #   M4: mcp / langgraph / langgraph-checkpoint-postgres
 dependencies = [
+    "httpx>=0.27",
     "jsonschema>=4.20.0",
     "mcp>=2.3.0",
     "numpy>=1.26.2",
@@ -41,6 +42,9 @@ packages = ["packages", "tools", "mcp_integration"]
 asyncio_mode = "auto"
 testpaths = ["tests", "tools/tests", "verifier/tests"]
 addopts = "-q"
+markers = [
+    "live: 需要本地 Ollama 与 data/ 的真实端到端用例（默认跳过，DSH_LIVE_TEST=1 开启）",
+]
 
 [tool.ruff]
 target-version = "py312"

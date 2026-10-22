@@ -38,7 +38,7 @@ def sm2_sign_file(
     message_file: Path,
     signature_file: Path,
     *,
-    key_id: str = "default",
+    key_id: str,
     signer_id: str = "1234567812345678",
 ) -> dict[str, Any]:
     """Sign a server-resolved file with GmSSL -in/-out; never expose key material."""

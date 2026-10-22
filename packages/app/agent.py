@@ -10,13 +10,13 @@ from enum import StrEnum
 from typing import Any, cast
 from uuid import uuid4
 
-from mcp import ClientSession
+from mcp import Client
 from mcp_integration.client.connection import connect_tools
 from tools.executor import execute_tool
 
 from packages.core.config import get_settings
 from packages.core.models import ToolCall, ToolResult
-from packages.llm.client import call_model
+from packages.llm.client import ModelClient, call_model, create_model_client
 
 SYSTEM_PROMPT = {
     "role": "system",
@@ -81,7 +81,7 @@ _ALLOWED: dict[Phase, frozenset[Phase]] = {
     Phase.STOPPED: frozenset(),
 }
 
-
+# 注册类的变量以及__repr__()打印与__eq__()判断是否相等
 @dataclass
 class LoopState:
     """一次 Run 的控制流数据。
@@ -123,6 +123,7 @@ async def _request_model(
     model: str,
     base_url: str,
     max_steps: int,
+    model_client: ModelClient | None = None,
 ) -> None:
     """REQUEST_MODEL：检查轮次预算 → 请求模型 → 进入 FINISH / DISPATCH_TOOLS / STOPPED。
 
@@ -133,8 +134,8 @@ async def _request_model(
         _enter(state, Phase.STOPPED)
         return
 
-    assistant = await asyncio.to_thread(
-        call_model, state.messages, tools=tools, model=model, base_url=base_url
+    assistant = await call_model(
+        state.messages, tools=tools, model=model, base_url=base_url, client=model_client
     )
     state.messages.append(assistant)
 
@@ -151,7 +152,7 @@ async def _request_model(
 async def _dispatch_tools(
     state: LoopState,
     *,
-    session: ClientSession,
+    session: Client,
     tools: list[dict[str, Any]],
 ) -> None:
     """DISPATCH_TOOLS：逐个执行 pending_calls，回传后回到 REQUEST_MODEL。
@@ -209,13 +210,14 @@ async def chat_turn(
     messages: list[dict[str, Any]],
     user_text: str,
     *,
-    session: ClientSession,
+    session: Client,
     tools: list[dict[str, Any]],
     model: str,
     base_url: str,
     max_steps: int = 5,
     evidence: list[dict[str, Any]] | None = None,
     run_id: str | None = None,
+    model_client: ModelClient | None = None,
 ) -> str:
     # 一次 Agent 任务的身份；调用方没给就新建。多轮对话每轮是一个新的 run。
     run_id = run_id or uuid4().hex
@@ -230,7 +232,12 @@ async def chat_turn(
     while True:
         if state.phase is Phase.REQUEST_MODEL:
             await _request_model(
-                state, tools=tools, model=model, base_url=base_url, max_steps=max_steps
+                state,
+                tools=tools,
+                model=model,
+                base_url=base_url,
+                max_steps=max_steps,
+                model_client=model_client,
             )
         elif state.phase is Phase.DISPATCH_TOOLS:
             await _dispatch_tools(state, session=session, tools=tools)
@@ -247,7 +254,7 @@ async def main() -> int:
     messages = [SYSTEM_PROMPT]
     print("Crypto Agent已经启动，输入exit退出。")
 
-    async with connect_tools() as (session, tools):
+    async with create_model_client() as model_client, connect_tools() as (session, tools):
         while True:
             try:
                 user_text = (await asyncio.to_thread(input, "\n你> ")).strip()
@@ -267,6 +274,7 @@ async def main() -> int:
                     tools=tools,
                     model=args.model,
                     base_url=args.base_url,
+                    model_client=model_client,
                 )
                 print(f"助手<{answer}")
             except RuntimeError as exc:
@@ -290,7 +298,7 @@ async def run(*, question: str) -> dict[str, object]:
     run_id = uuid4().hex
     evidence: list[dict[str, Any]] = []
     try:
-        async with connect_tools() as (session, tools):
+        async with create_model_client() as model_client, connect_tools() as (session, tools):
             answer = await chat_turn(
                 messages,
                 question,
@@ -300,6 +308,7 @@ async def run(*, question: str) -> dict[str, object]:
                 base_url=settings.OLLAMA_BASE_URL,
                 evidence=evidence,
                 run_id=run_id,
+                model_client=model_client,
             )
     except LoopStopped as exc:
         # 撞限不是崩溃：给出结构化停止原因，05 段可以直接落库。

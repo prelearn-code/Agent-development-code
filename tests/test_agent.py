@@ -216,6 +216,12 @@ async def test_user_supplies_missing_parameter_next_turn(
     assert snapshots[2][-1]["content"] == "是 file_001"
 
 
+def test_as_arguments_handles_invalid_json_and_non_dict() -> None:
+    assert client._as_arguments("not json") == {}
+    assert client._as_arguments([1, 2]) == {}
+    assert client._as_arguments({"file_id": "file_001"}) == {"file_id": "file_001"}
+
+
 def test_id_placeholder_check_does_not_reject_normal_text() -> None:
     tools = [
         {

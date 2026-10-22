@@ -40,6 +40,7 @@ async def test_run_uses_configured_model_and_base_url() -> None:
     assert result["status"] == "completed"
     assert result["answer"] == "配置生效"
     assert result["evidence"] == []
+    assert seen["client"].is_closed
 
 
 def test_cli_defaults_come_from_settings_and_can_be_overridden() -> None:

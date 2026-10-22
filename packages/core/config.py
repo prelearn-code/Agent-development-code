@@ -138,7 +138,7 @@ class Settings(BaseSettings):
             raise ValueError("DSN 必须以 postgresql+asyncpg:// 开头")
         return v
 
-
+# 放入缓存，只加载一次，后续从缓存中读取。
 @lru_cache(maxsize=1)
 def get_settings() -> Settings:
     return Settings()
