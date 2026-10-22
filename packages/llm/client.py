@@ -10,8 +10,16 @@ type ModelClient = httpx.AsyncClient
 
 
 def create_model_client() -> ModelClient:
-    """每个任务或交互会话创建一次，调用方用 async with 关闭连接池。"""
-    return httpx.AsyncClient(timeout=get_settings().LLM_TIMEOUT_S, follow_redirects=True)
+    """每个任务或交互会话创建一次，调用方用 async with 关闭连接池。
+
+    trust_env=False：Ollama 是本机回环服务，不该走 HTTP(S)_PROXY；
+    同时避免 httpx 解析 NO_PROXY 里的 `[::1]` 这类条目时抛 InvalidURL。
+    """
+    return httpx.AsyncClient(
+        timeout=get_settings().LLM_TIMEOUT_S,
+        follow_redirects=True,
+        trust_env=False,
+    )
 
 
 async def _request_message(client: ModelClient, url: str, body: dict[str, Any]) -> dict[str, Any]:
