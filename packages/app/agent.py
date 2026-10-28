@@ -15,6 +15,7 @@ from mcp_integration.client.connection import connect_tools
 from tools.executor import execute_tool
 
 from packages.core.config import get_settings
+from packages.core.errors import LLMError
 from packages.core.models import ToolCall, ToolResult
 from packages.llm.client import ModelClient, call_model, create_model_client
 
@@ -98,15 +99,20 @@ class LoopState:
     pending_calls: list[dict[str, Any]] = field(default_factory=list)
     answer: str = ""
     stop_reason: str = ""
+    stop_detail: str = ""
 
 
 class LoopStopped(RuntimeError):
-    """轮次/预算耗尽导致的停止；由 run() 转成 status=stopped 的结构化结果。"""
+    """轮次/预算耗尽或模型请求失败导致的停止；由 run() 转成结构化结果。"""
 
-    def __init__(self, reason: str, steps: int) -> None:
-        super().__init__(f"Loop 已停止（{reason}），共执行 {steps} 步")
+    def __init__(self, reason: str, steps: int, detail: str = "") -> None:
+        message = f"Loop 已停止（{reason}），共执行 {steps} 步"
+        if detail:
+            message = f"{message}：{detail}"
+        super().__init__(message)
         self.reason = reason
         self.steps = steps
+        self.detail = detail
 
 
 def _enter(state: LoopState, next_phase: Phase) -> None:
@@ -133,12 +139,18 @@ async def _request_model(
         state.stop_reason = "max_steps"
         _enter(state, Phase.STOPPED)
         return
+    try:
+        assistant = await call_model(
+            state.messages, tools=tools, model=model, base_url=base_url, client=model_client
+        )
+    except LLMError as exc:
+        # 模型请求失败：不是"继续跑"，而是带着原因进入 STOPPED。
+        state.stop_reason = exc.reason
+        state.stop_detail = str(exc)
+        _enter(state, Phase.STOPPED)
+        return
 
-    assistant = await call_model(
-        state.messages, tools=tools, model=model, base_url=base_url, client=model_client
-    )
     state.messages.append(assistant)
-
     tool_calls = assistant.get("tool_calls") or []
     if not tool_calls:
         state.answer = cast(str, assistant.get("content", ""))
@@ -244,7 +256,7 @@ async def chat_turn(
         elif state.phase is Phase.FINISH:
             return state.answer
         else:  # Phase.STOPPED
-            raise LoopStopped(state.stop_reason, state.step_index)
+            raise LoopStopped(state.stop_reason, state.step_index,state.stop_detail)
 
 
 async def main() -> int:
@@ -297,8 +309,8 @@ async def run(*, question: str) -> dict[str, object]:
     messages = [SYSTEM_PROMPT.copy()]
     run_id = uuid4().hex
     evidence: list[dict[str, Any]] = []
-    try:
-        async with create_model_client() as model_client, connect_tools() as (session, tools):
+    async with create_model_client() as model_client, connect_tools() as (session, tools):
+        try:
             answer = await chat_turn(
                 messages,
                 question,
@@ -310,15 +322,18 @@ async def run(*, question: str) -> dict[str, object]:
                 run_id=run_id,
                 model_client=model_client,
             )
-    except LoopStopped as exc:
-        # 撞限不是崩溃：给出结构化停止原因，05 段可以直接落库。
-        return {
-            "status": "stopped",
-            "reason": exc.reason,
-            "steps": exc.steps,
-            "run_id": run_id,
-            "evidence": evidence,
-        }
+        except LoopStopped as exc:
+            # 必须在 async with 内部捕获：MCP 的 TaskGroup 会把逃逸异常包成
+            # ExceptionGroup，外面的 except 就接不到了。
+            failed = exc.reason.startswith("llm_")
+            return {
+                "status": "failed" if failed else "stopped",
+                "reason": exc.reason,
+                "detail": exc.detail,
+                "steps": exc.steps,
+                "run_id": run_id,
+                "evidence": evidence,
+            }
     return {"status": "completed", "run_id": run_id, "answer": answer, "evidence": evidence}
 
 

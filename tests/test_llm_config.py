@@ -7,6 +7,7 @@ from typing import Any
 import httpx
 import pytest
 from packages.core.config import Settings
+from packages.core.errors import LLMHTTPError, LLMParseError, LLMTimeoutError
 from packages.llm import client
 
 
@@ -80,9 +81,9 @@ async def test_model_failures_propagate_and_close_owned_client(
     owned = httpx.AsyncClient(transport=httpx.MockTransport(respond))
     monkeypatch.setattr(client, "create_model_client", lambda: owned)
     expected = {
-        "http": httpx.HTTPStatusError,
-        "timeout": httpx.ReadTimeout,
-        "json": json.JSONDecodeError,
+        "http": LLMHTTPError,
+        "timeout": LLMTimeoutError,
+        "json": LLMParseError,
     }
     with pytest.raises(expected[failure]):
         await client.call_model([], [], "test-model", "http://localhost:11434")
