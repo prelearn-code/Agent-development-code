@@ -53,6 +53,8 @@ class Settings(BaseSettings):
     LLM_TIMEOUT_S: int = Field(default=120, gt=0)
     LLM_THINK: bool = False  # 固定 false，否则 token 消耗无法跨配置比较
     LLM_NUM_CTX: int = 8192
+    LLM_MAX_STEPS: int = 5
+    LOOP_DEADLINE_S: int = 400
 
     # ---- 数据库（M2 引入）----
     POSTGRES_HOST: str = "localhost"

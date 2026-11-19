@@ -25,7 +25,11 @@ async def test_model_request_uses_configured_timeout(monkeypatch: pytest.MonkeyP
 
     owned = httpx.AsyncClient(transport=httpx.MockTransport(respond))
     monkeypatch.setattr(client, "create_model_client", lambda: owned)
-    monkeypatch.setattr(client, "get_settings", lambda: Settings.model_construct(LLM_TIMEOUT_S=7))
+    monkeypatch.setattr(
+        client,
+        "get_settings",
+        lambda: Settings.model_construct(LLM_TIMEOUT_S=7, LLM_NUM_CTX=4096, LLM_THINK=False),
+    )
     messages = [{"role": "user", "content": "计算摘要"}]
     tools = [{"type": "function", "function": {"name": "sha256_file"}}]
 
@@ -41,7 +45,9 @@ async def test_model_request_uses_configured_timeout(monkeypatch: pytest.MonkeyP
             "messages": messages,
             "tools": tools,
             "stream": False,
-            "options": {"temperature": 0},
+            # num_ctx 必须显式传：不传时 Ollama 用默认窗口并从最前面静默截断。
+            "think": False,
+            "options": {"temperature": 0, "num_ctx": 4096},
         },
     }
     assert owned.is_closed

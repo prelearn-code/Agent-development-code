@@ -4,9 +4,7 @@ import argparse
 import asyncio
 import json
 import sys
-from dataclasses import dataclass, field
 from datetime import UTC, datetime
-from enum import StrEnum
 from typing import Any, cast
 from uuid import uuid4
 
@@ -16,8 +14,10 @@ from tools.executor import execute_tool
 
 from packages.core.config import get_settings
 from packages.core.errors import LLMError
+from packages.core.loop_state import LoopState, Phase
 from packages.core.models import ToolCall, ToolResult
 from packages.llm.client import ModelClient, call_model, create_model_client
+from packages.llm.context import ContextMessage
 
 SYSTEM_PROMPT = {
     "role": "system",
@@ -31,6 +31,11 @@ SYSTEM_PROMPT = {
         "收到 invalid_arguments 时，询问用户修正，不要重复发送同样的错误参数。"
         "结合完整对话历史理解追问和补充信息，参数完整后再正常调用工具。"
     ),
+}
+
+HISTORY_COMPACT = {
+    "role": "system",
+    "content": "",
 }
 
 
@@ -65,15 +70,6 @@ def _evidence(outcome: ToolResult[Any]) -> dict[str, Any]:
     }
 
 
-class Phase(StrEnum):
-    """Loop 的显式状态。合法的下一步见 _ALLOWED。"""
-
-    REQUEST_MODEL = "request_model"  # 唯一的决策点：请求模型并决定下一步
-    DISPATCH_TOOLS = "dispatch_tools"  # 执行 pending_calls，结果回传
-    FINISH = "finish"  # 正常结束：模型不再提议工具
-    STOPPED = "stopped"  # 预算/轮次耗尽：结束但不回答
-
-
 # 转移表本身就是自检问题 4 的答案：只有 REQUEST_MODEL 能决定结束。
 _ALLOWED: dict[Phase, frozenset[Phase]] = {
     Phase.REQUEST_MODEL: frozenset({Phase.FINISH, Phase.DISPATCH_TOOLS, Phase.STOPPED}),
@@ -81,25 +77,6 @@ _ALLOWED: dict[Phase, frozenset[Phase]] = {
     Phase.FINISH: frozenset(),
     Phase.STOPPED: frozenset(),
 }
-
-# 注册类的变量以及__repr__()打印与__eq__()判断是否相等
-@dataclass
-class LoopState:
-    """一次 Run 的控制流数据。
-
-    只放数据、不放回调和连接：05 段可以直接把它序列化进 agent_runs/agent_steps，
-    06 段恢复时据此决定从哪个 Phase 继续。pending_calls 也是 04 段流式累积的落点。
-    """
-
-    run_id: str
-    messages: list[dict[str, Any]]
-    evidence: list[dict[str, Any]] = field(default_factory=list)
-    step_index: int = 0
-    phase: Phase = Phase.REQUEST_MODEL
-    pending_calls: list[dict[str, Any]] = field(default_factory=list)
-    answer: str = ""
-    stop_reason: str = ""
-    stop_detail: str = ""
 
 
 class LoopStopped(RuntimeError):
@@ -123,6 +100,7 @@ def _enter(state: LoopState, next_phase: Phase) -> None:
 
 
 async def _request_model(
+    context: ContextMessage | None,
     state: LoopState,
     *,
     tools: list[dict[str, Any]],
@@ -130,35 +108,42 @@ async def _request_model(
     base_url: str,
     max_steps: int,
     model_client: ModelClient | None = None,
-) -> None:
+) -> dict[str, int] | None:
     """REQUEST_MODEL：检查轮次预算 → 请求模型 → 进入 FINISH / DISPATCH_TOOLS / STOPPED。
 
-    04 段在这里加 deadline、四类错误分类；03 段不需要动这里。
+    返回本次模型响应的 token 计数。
     """
     if state.step_index >= max_steps:
         state.stop_reason = "max_steps"
         _enter(state, Phase.STOPPED)
-        return
+        return None
     try:
+        turn_usage: dict[str, int] = {}
         assistant = await call_model(
-            state.messages, tools=tools, model=model, base_url=base_url, client=model_client
+            state.messages,
+            tools=tools,
+            model=model,
+            base_url=base_url,
+            client=model_client,
+            context=context,
+            usage=turn_usage,
         )
     except LLMError as exc:
         # 模型请求失败：不是"继续跑"，而是带着原因进入 STOPPED。
         state.stop_reason = exc.reason
         state.stop_detail = str(exc)
         _enter(state, Phase.STOPPED)
-        return
+        return None
 
     state.messages.append(assistant)
     tool_calls = assistant.get("tool_calls") or []
     if not tool_calls:
         state.answer = cast(str, assistant.get("content", ""))
         _enter(state, Phase.FINISH)
-        return
-
-    state.pending_calls = list(tool_calls)
-    _enter(state, Phase.DISPATCH_TOOLS)
+    else:
+        state.pending_calls = list(tool_calls)
+        _enter(state, Phase.DISPATCH_TOOLS)
+    return turn_usage or None
 
 
 async def _dispatch_tools(
@@ -230,7 +215,13 @@ async def chat_turn(
     evidence: list[dict[str, Any]] | None = None,
     run_id: str | None = None,
     model_client: ModelClient | None = None,
+    context: ContextMessage | None = None,
 ) -> str:
+    """跑一轮对话。
+
+    `messages` 是当前轮的消息容器（调用方传空列表即可），本轮状态会在结束时
+    以快照追加进 `context.history`；`context` 提供 system / 历史摘要 / 历史轮次。
+    """
     # 一次 Agent 任务的身份；调用方没给就新建。多轮对话每轮是一个新的 run。
     run_id = run_id or uuid4().hex
     messages.append({"role": "user", "content": user_text})
@@ -240,33 +231,50 @@ async def chat_turn(
         evidence=evidence if evidence is not None else [],
     )
 
-    # 显式循环：每轮进入哪个 Phase 由状态决定，结束只有 FINISH 和 STOPPED 两种。
-    while True:
-        if state.phase is Phase.REQUEST_MODEL:
-            await _request_model(
-                state,
-                tools=tools,
-                model=model,
-                base_url=base_url,
-                max_steps=max_steps,
-                model_client=model_client,
-            )
-        elif state.phase is Phase.DISPATCH_TOOLS:
-            await _dispatch_tools(state, session=session, tools=tools)
-        elif state.phase is Phase.FINISH:
-            return state.answer
-        else:  # Phase.STOPPED
-            raise LoopStopped(state.stop_reason, state.step_index,state.stop_detail)
+    try:
+        # 显式循环：每轮进入哪个 Phase 由状态决定，结束只有 FINISH 和 STOPPED 两种。
+        while True:
+            if state.phase is Phase.REQUEST_MODEL:
+                turn_usage = await _request_model(
+                    context,
+                    state,
+                    tools=tools,
+                    model=model,
+                    base_url=base_url,
+                    max_steps=max_steps,
+                    model_client=model_client,
+                )
+                if turn_usage is not None:
+                    tokens = turn_usage["prompt_tokens"] + turn_usage["completion_tokens"]
+                    previous_tokens = context.usage if context is not None else state.usage
+                    state.usage += tokens - previous_tokens
+                    if context is not None:
+                        context.usage = tokens
+            elif state.phase is Phase.DISPATCH_TOOLS:
+                await _dispatch_tools(state, session=session, tools=tools)
+            elif state.phase is Phase.FINISH:
+                return state.answer
+            else:  # Phase.STOPPED
+                raise LoopStopped(state.stop_reason, state.step_index, state.stop_detail)
+    finally:
+        # 正常结束、预算停止、模型失败都要进历史：失败那几步同样需要审计。
+        if context is not None:
+            context.add_turn(state)
 
 
 async def main() -> int:
     parser = _build_parser()
     args = parser.parse_args()
 
-    messages = [SYSTEM_PROMPT]
+    context = ContextMessage(
+        system_message=SYSTEM_PROMPT.copy(),
+        history_compact=[HISTORY_COMPACT],
+    )
+
     print("Crypto Agent已经启动，输入exit退出。")
 
     async with create_model_client() as model_client, connect_tools() as (session, tools):
+        context.tool_scheme = tools
         while True:
             try:
                 user_text = (await asyncio.to_thread(input, "\n你> ")).strip()
@@ -280,13 +288,14 @@ async def main() -> int:
                 continue
             try:
                 answer = await chat_turn(
-                    messages,
+                    [],
                     user_text,
                     session=session,
-                    tools=tools,
+                    tools=context.tool_scheme,
                     model=args.model,
                     base_url=args.base_url,
                     model_client=model_client,
+                    context=context,
                 )
                 print(f"助手<{answer}")
             except RuntimeError as exc:
@@ -306,7 +315,8 @@ def _build_parser() -> argparse.ArgumentParser:
 async def run(*, question: str) -> dict[str, object]:
     """Run the existing single-turn loop through the application's JSON CLI."""
     settings = get_settings()
-    messages = [SYSTEM_PROMPT.copy()]
+    context = ContextMessage(system_message=SYSTEM_PROMPT.copy())
+    messages: list[dict[str, Any]] = []
     run_id = uuid4().hex
     evidence: list[dict[str, Any]] = []
     async with create_model_client() as model_client, connect_tools() as (session, tools):
@@ -321,20 +331,29 @@ async def run(*, question: str) -> dict[str, object]:
                 evidence=evidence,
                 run_id=run_id,
                 model_client=model_client,
+                context=context,
             )
         except LoopStopped as exc:
             # 必须在 async with 内部捕获：MCP 的 TaskGroup 会把逃逸异常包成
             # ExceptionGroup，外面的 except 就接不到了。
             failed = exc.reason.startswith("llm_")
-            return {
+            result: dict[str, object] = {
                 "status": "failed" if failed else "stopped",
                 "reason": exc.reason,
                 "detail": exc.detail,
                 "steps": exc.steps,
-                "run_id": run_id,
-                "evidence": evidence,
             }
-    return {"status": "completed", "run_id": run_id, "answer": answer, "evidence": evidence}
+        else:
+            result = {"status": "completed", "answer": answer}
+    return {
+        **result,
+        "run_id": run_id,
+        "usage": {
+            "run_tokens": context.history[-1].usage,
+            "context_tokens": context.usage,
+        },
+        "evidence": evidence,
+    }
 
 
 if __name__ == "__main__":

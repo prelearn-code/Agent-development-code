@@ -8,6 +8,7 @@ import pytest
 from mcp.types import CallToolResult
 from packages.app import agent
 from packages.core.config import Settings
+from packages.llm.context import ContextMessage
 
 DIGEST = "88036eecf53de118265ae2c33ec3881e8d98cf3a29507fea6c9802ae4e1f7f4f"
 
@@ -69,6 +70,46 @@ async def test_tool_call_then_answer_transitions() -> None:
     # REQUEST_MODEL -> DISPATCH_TOOLS -> REQUEST_MODEL -> FINISH 的消息顺序
     assert [message["role"] for message in messages] == ["user", "assistant", "tool", "assistant"]
     assert messages[2]["tool_call_id"] == "call_00_0"
+
+
+@pytest.mark.asyncio
+async def test_context_usage_updates_after_each_model_response() -> None:
+    session = AsyncMock()
+    session.call_tool.return_value = _ok()
+    context = ContextMessage()
+    replies = iter([
+        (90, 10, _assistant("第一轮")),
+        (110, 10, _assistant(calls=[_tool_call()])),
+        (140, 20, _assistant("第二轮")),
+    ])
+    saved_usage: list[int] = []
+
+    async def call_model(*args: Any, usage: dict[str, int], **kwargs: Any) -> dict[str, Any]:
+        saved_usage.append(context.usage)
+        prompt, completion, message = next(replies)
+        usage.update(prompt_tokens=prompt, completion_tokens=completion)
+        return message
+
+    dispatch_tools = agent._dispatch_tools
+
+    async def dispatch_after_usage_update(state: agent.LoopState, **kwargs: Any) -> None:
+        assert state.usage == 20
+        assert context.usage == 120
+        await dispatch_tools(state, **kwargs)
+
+    with (
+        patch.object(agent, "call_model", side_effect=call_model),
+        patch.object(agent, "_dispatch_tools", side_effect=dispatch_after_usage_update),
+    ):
+        for question in ("你好", "算摘要"):
+            await agent.chat_turn(
+                [], question, session=session, tools=TOOLS, model="fake", base_url="fake",
+                context=context,
+            )
+
+    assert saved_usage == [0, 100, 120]
+    assert [turn.usage for turn in context.history] == [100, 60]
+    assert context.usage == 160
 
 
 @pytest.mark.asyncio
